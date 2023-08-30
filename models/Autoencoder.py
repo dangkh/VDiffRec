@@ -5,6 +5,7 @@ import numpy as np
 import math
 from torch.nn.init import xavier_normal_, constant_, xavier_uniform_
 from kmeans_pytorch import kmeans
+from models.modules import ISAB, MAB, SAB, PMA
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -215,5 +216,38 @@ def xavier_normal_initialization(module):
     if isinstance(module, nn.Linear):
         xavier_normal_(module.weight.data)
         if module.bias is not None:
-            constant_(module.bias.data, 0)            
+            constant_(module.bias.data, 0)         
+
+class SetTransformer(nn.Module):
+    def __init__(
+        self,
+        dim_input=64000,
+        num_outputs=4,
+        dim_output=32,
+        num_inds=32,
+        dim_hidden=32,
+        num_heads=4,
+        ln=False,
+        n_item=1
+    ):
+        super(SetTransformer, self).__init__()
+        self.n_item = n_item
+        self.enc = nn.Sequential(
+            SAB(dim_in=1, dim_out=10, num_heads=4),
+            SAB(dim_in=10, dim_out=10, num_heads=4),
+        )
+        self.dec = nn.Sequential(
+            nn.Dropout(),
+            PMA(dim_hidden, num_heads, num_outputs, ln=ln),
+            nn.Dropout(),
+            nn.Linear(dim_hidden, dim_output),
+        )
+        self.predictItem = nn.Linear(dim_output, self.n_item)
+
+    def encode(self, X):
+        X = torch.unsqueeze(X, 2)
+        return self.dec(self.enc(X)).squeeze()   
+
+    def decode(self, X):
+        return self.predictItem(X)   
                 

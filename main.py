@@ -21,6 +21,8 @@ import scipy.sparse as sp
 import models.gaussian_diffusion as gd
 from models.Autoencoder import AutoEncoder as AE
 from models.Autoencoder import compute_loss
+from models.modules import *
+from models.Autoencoder import SetTransformer as ST
 from models.DNN import DNN
 import evaluate_utils
 import data_utils
@@ -41,8 +43,8 @@ def seed_worker(worker_id):
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--dataset', type=str, default='ml-1m_clean', help='choose the dataset')
-parser.add_argument('--data_path', type=str, default='../datasets/', help='load data path')
-parser.add_argument('--emb_path', type=str, default='../datasets/')
+parser.add_argument('--data_path', type=str, default='./datasets/', help='load data path')
+parser.add_argument('--emb_path', type=str, default='./datasets/')
 parser.add_argument('--lr1', type=float, default=0.0005, help='learning rate for Autoencoder')
 parser.add_argument('--lr2', type=float, default=0.0003, help='learning rate for MLP')
 parser.add_argument('--wd1', type=float, default=0.0, help='weight decay for Autoencoder')
@@ -105,7 +107,7 @@ test_path = args.data_path + 'test_list.npy'
 train_data, valid_y_data, test_y_data, n_user, n_item = data_utils.data_load(train_path, valid_path, test_path)
 train_dataset = data_utils.DataDiffusion(torch.FloatTensor(train_data.A))
 # train_loader = DataLoader(train_dataset, batch_size=args.batch_size, pin_memory=True, shuffle=True)
-train_loader = DataLoader(train_dataset, batch_size=args.batch_size, pin_memory=True, shuffle=False, num_workers=4, worker_init_fn=worker_init_fn)
+train_loader = DataLoader(train_dataset, batch_size=args.batch_size, pin_memory=True, shuffle=False)
 test_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=False)
 
 if args.tst_w_val:
@@ -122,6 +124,7 @@ assert len(item_emb) == n_item
 out_dims = eval(args.out_dims)
 in_dims = eval(args.in_dims)[::-1]
 Autoencoder = AE(item_emb, args.n_cate, in_dims, out_dims, device, args.act_func, args.reparam).to(device)
+SetTransformer = ST(dim_hidden=128, num_heads = 16, n_item=n_item)
 
 ### Build Gaussian Diffusion ###
 if args.mean_type == 'x0':
@@ -221,9 +224,11 @@ def evaluate(data_loader, data_te, mask_his, topN):
             # mask map
             his_data = mask_his[e_idxlist[batch_idx*args.batch_size:batch_idx*args.batch_size+len(aebatch)]]
 
-            _, batch_latent, _ = Autoencoder.Encode(aebatch)
+            # _, batch_latent, _ = Autoencoder.Encode(aebatch)
+            batch_latent = SetTransformer.encode(aebatch)
             batch_latent_recon = diffusion.p_sample(model, batch_latent, args.sampling_steps, args.sampling_noise)
-            prediction = Autoencoder.Decode(batch_latent_recon)  # [batch_size, n1_items + n2_items + n3_items]
+            # prediction = Autoencoder.Decode(batch_latent_recon)  # [batch_size, n1_items + n2_items + n3_items]
+            prediction = Autoencoder.Decode(batch_latent_recon)
 
             prediction[his_data.nonzero()] = -np.inf  # mask ui pairs in train & validation set
 
@@ -305,7 +310,9 @@ for epoch in range(1, args.epochs + 1):
         batch_count += 1
         optimizer1.zero_grad()
         optimizer2.zero_grad()
-        _, batch_latent, _ = Autoencoder.Encode(aebatch)
+        
+        # _, batch_latent, _ = Autoencoder.Encode(aebatch)
+        batch_latent = SetTransformer.encode(aebatch)
         terms = diffusion.training_losses(model, batch_latent, args.reweight)
         elbo = terms["loss"].mean()  # loss from diffusion
         batch_latent_recon = terms["pred_xstart"]
