@@ -15,7 +15,7 @@ class AutoEncoder(nn.Module):
     def __init__(self, item_emb, n_cate, in_dims, out_dims, device, act_func, reparam=True, dropout=0.1):
         super(AutoEncoder, self).__init__()
 
-        self.item_emb = item_emb
+        self.item_emb = item_emb.to(device)
         self.maxItem = 1000
         self.n_cate = n_cate
         self.in_dims = in_dims
@@ -123,7 +123,9 @@ class AutoEncoder(nn.Module):
                             raise ValueError
                     decoder_modules[i].pop()
                 self.decoder = nn.ModuleList([nn.Sequential(*decoder_modules[i]) for i in range(n_cate)])
-        self.reduceDim = nn.Linear(self.maxItem * 64, self.in_dims[0])
+
+        # self.U = nn.Embedding(self.maxItem * 64, 64, max_norm=True)
+        self.reduceDim = nn.Linear(self.maxItem * 64, 64)
         # self.decodeDim = nn.Linear(self.in_dims[0], self.maxItem * 64)
         self.predictItem = nn.Linear(self.in_dims[0], self.n_item)
         self.activateF = nn.Sigmoid()
@@ -134,6 +136,7 @@ class AutoEncoder(nn.Module):
     def Encode(self, batch):
         batch = self.dropout(batch)
         batch = self.reduceDim(batch)
+        # batch = self.U(batch)
 
         return '', batch, ''
 
@@ -180,7 +183,8 @@ class AutoEncoder(nn.Module):
         return eps.mul(std).add_(mu)
     
     def Decode(self, batch):
-        return self.activateF(self.predictItem(batch))
+        return self.activateF(torch.matmul(batch, self.item_emb.T))
+        # return self.activateF(self.predictItem(batch))
 
         if len(self.out_dims) == 0 or self.n_cate == 1:  # one-layer decoder
             return self.decoder(batch)
@@ -199,7 +203,8 @@ class AutoEncoder(nn.Module):
             return pred
     
 def compute_loss(recon_x, x):
-    return torch.nn.MSELoss()(recon_x, x)
+    mask = torch.where(x!= 0)
+    return torch.nn.MSELoss()(recon_x[mask], x[mask])
     # return -torch.mean(torch.sum(F.log_softmax(recon_x, 1) * x, -1))  # multinomial log likelihood in MultVAE
 
 

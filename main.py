@@ -59,7 +59,7 @@ parser.add_argument('--round', type=int, default=1, help='record the experiment'
 
 # params for the Autoencoder
 parser.add_argument('--n_cate', type=int, default=1, help='category num of items')
-parser.add_argument('--in_dims', type=str, default='[300]', help='the dims for the encoder')
+parser.add_argument('--in_dims', type=str, default='[64]', help='the dims for the encoder')
 parser.add_argument('--out_dims', type=str, default='[]', help='the hidden dims for the decoder')
 parser.add_argument('--act_func', type=str, default='tanh', help='activation function for autoencoder')
 parser.add_argument('--lamda', type=float, default=0.05, help='hyper-parameter of multinomial log-likelihood for AE: 0.01, 0.02, 0.03, 0.05')
@@ -94,7 +94,7 @@ print("args:", args)
 
 os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
 device = torch.device("cuda:0" if args.cuda else "cpu")
-
+# device = "cpu"
 print("Starting time: ", time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(time.time())))
 
 ### DATA LOAD ###
@@ -118,6 +118,7 @@ print('data ready.')
 ### Build Autoencoder ###
 emb_path = args.emb_path + args.dataset + '/item_emb.npy'
 item_emb = torch.from_numpy(np.load(emb_path, allow_pickle=True))
+# item_emb = torch.nn.functional.normalize(item_emb, dim = 0)
 assert len(item_emb) == n_item
 out_dims = eval(args.out_dims)
 in_dims = eval(args.in_dims)[::-1]
@@ -275,6 +276,7 @@ print("Start training...")
 listBatchTrain = []
 crossELoss = torch.nn.CrossEntropyLoss()
 sfm = torch.nn.Softmax(dim = 1)
+# mseLoss = torch.nn.MSELoss()
 listSFBatch = []
 for epoch in range(1, args.epochs + 1):
     # if epoch - best_epoch >= 20:
@@ -301,7 +303,7 @@ for epoch in range(1, args.epochs + 1):
             label = listSFBatch[batch_idx]
         aebatch = aebatch.to(device)
         batch = batch.to(device)
-        label = label.to(device)
+        # label = label.to(device)
         batch_count += 1
         optimizer1.zero_grad()
         optimizer2.zero_grad()
@@ -322,8 +324,8 @@ for epoch in range(1, args.epochs + 1):
         else:
             anneal = args.vae_anneal_cap
 
-        # vae_loss = compute_loss(batch_recon, batch) # + anneal * vae_kl  # loss from autoencoder
-        vae_loss = crossELoss(batch_recon, label)
+        vae_loss = compute_loss(batch_recon, batch) # + anneal * vae_kl  # loss from autoencoder
+        # vae_loss = crossELoss(batch_recon, label)
 
         if args.reweight:
             loss = lamda * elbo + vae_loss

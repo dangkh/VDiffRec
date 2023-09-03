@@ -2,3 +2,5 @@
 *.pyc
 *.pth
 .DS_Store
+*.rar
+*.npy
