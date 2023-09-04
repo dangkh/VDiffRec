@@ -1,3 +1,4 @@
 python main.py --reweight=1 --log_name=log --round=1 --dataset=ml-1m_noisy --data_path=../datasets/ml-1m_noisy/
 !python main.py --n_cate 1 --cuda --lamda 0.05 --dataset=ml-1m_clean --data_path=../datasets/ml-1m_clean/ --batch_size=400  --emb_size=300 --noise_scale 0.1 --mean_type=eps --steps=10 --noise_min=0.01 --noise_max=0.05 --sampling_steps=0 --reweight=1 --log_name=log --round=1 --gpu=0
 !python main.py --n_cate 1 --cuda --lamda 0.05 --dataset=ml-1m_clean --data_path=../datasets/ml-1m_clean/ --batch_size=400  --emb_size=32 --noise_scale 0.1 --mean_type=eps --steps=10 --noise_min=0.1 --noise_max=0.9 --sampling_steps=0 --reweight=1 --log_name=log --round=1 --gpu=0
+# !python main.py --lamda 0.01 --dataset=ml-1m_clean --data_path=../datasets/ml-1m_clean/ --batch_size=400  --emb_size=32 --noise_scale 0.001 --mean_type=eps --steps=5 --noise_min=0.005 --noise_max=0.02 --sampling_steps=0 --reweight=1 --log_name=log --round=1 --cuda --gpu=0

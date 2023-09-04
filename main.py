@@ -27,7 +27,7 @@ import data_utils
 from copy import deepcopy
 
 import random
-random_seed = 1
+random_seed = 1001
 torch.manual_seed(random_seed) # cpu
 torch.cuda.manual_seed(random_seed) #gpu
 np.random.seed(random_seed) #numpy
@@ -43,9 +43,9 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--dataset', type=str, default='ml-1m_clean', help='choose the dataset')
 parser.add_argument('--data_path', type=str, default='../datasets/', help='load data path')
 parser.add_argument('--emb_path', type=str, default='../datasets/')
-parser.add_argument('--lr1', type=float, default=0.0005, help='learning rate for Autoencoder')
+parser.add_argument('--lr1', type=float, default=0.001, help='learning rate for Autoencoder')
 parser.add_argument('--lr2', type=float, default=0.0003, help='learning rate for MLP')
-parser.add_argument('--wd1', type=float, default=0.0, help='weight decay for Autoencoder')
+parser.add_argument('--wd1', type=float, default=1e-5, help='weight decay for Autoencoder')
 parser.add_argument('--wd2', type=float, default=0.0, help='weight decay for MLP')
 parser.add_argument('--batch_size', type=int, default=400)
 parser.add_argument('--epochs', type=int, default=1000, help='upper epoch limit')
@@ -72,7 +72,7 @@ parser.add_argument('--reparam', type=bool, default=True, help="Autoencoder with
 
 # params for the MLP
 parser.add_argument('--time_type', type=str, default='cat', help='cat or add')
-parser.add_argument('--mlp_dims', type=str, default='[300]', help='the dims for the DNN')
+parser.add_argument('--mlp_dims', type=str, default='[30]', help='the dims for the DNN')
 parser.add_argument('--norm', type=bool, default=False, help='Normalize the input or not')
 parser.add_argument('--emb_size', type=int, default=10, help='timestep embedding size')
 parser.add_argument('--mlp_act_func', type=str, default='tanh', help='the activation function for MLP')
@@ -150,7 +150,7 @@ print("Number of parameters:", param_num)
 
 if args.optimizer1 == 'Adagrad':
     optimizer1 = optim.Adagrad(
-        model.parameters(), lr=args.lr1, initial_accumulator_value=1e-8, weight_decay=args.wd1)
+        Autoencoder.parameters(), lr=args.lr1, initial_accumulator_value=1e-8, weight_decay=args.wd1)
 elif args.optimizer1 == 'Adam':
     optimizer1 = optim.Adam(Autoencoder.parameters(), lr=args.lr1, weight_decay=args.wd1)
 elif args.optimizer1 == 'AdamW':
@@ -303,7 +303,7 @@ for epoch in range(1, args.epochs + 1):
             label = listSFBatch[batch_idx]
         aebatch = aebatch.to(device)
         batch = batch.to(device)
-        # label = label.to(device)
+        label = label.to(device)
         batch_count += 1
         optimizer1.zero_grad()
         optimizer2.zero_grad()
@@ -324,8 +324,8 @@ for epoch in range(1, args.epochs + 1):
         else:
             anneal = args.vae_anneal_cap
 
-        vae_loss = compute_loss(batch_recon, batch) # + anneal * vae_kl  # loss from autoencoder
-        # vae_loss = crossELoss(batch_recon, label)
+        # vae_loss = compute_loss(batch_recon, batch) # + anneal * vae_kl  # loss from autoencoder
+        vae_loss = crossELoss(batch_recon, label)
 
         if args.reweight:
             loss = lamda * elbo + vae_loss
