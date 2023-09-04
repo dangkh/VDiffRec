@@ -17,6 +17,7 @@ class AutoEncoder(nn.Module):
 
         self.item_emb = item_emb.to(device)
         self.maxItem = 1000
+        self.num_user = self.item_emb.shape[0]
         self.n_cate = n_cate
         self.in_dims = in_dims
         self.out_dims = out_dims
@@ -126,8 +127,9 @@ class AutoEncoder(nn.Module):
 
         # self.U = nn.Embedding(self.maxItem * 64, 64, max_norm=True)
         self.reduceDim = nn.Linear(self.maxItem * 64, 64)
+        self.reduceDim2 = nn.Linear(64, 64)
         # self.decodeDim = nn.Linear(self.in_dims[0], self.maxItem * 64)
-        self.predictItem = nn.Linear(self.in_dims[0], self.n_item)
+        self.predictItem = nn.Linear(2810, self.n_item)
         self.activateF = nn.Sigmoid()
         self.loss = torch.nn.MSELoss()
         self.apply(xavier_normal_initialization)
@@ -135,10 +137,12 @@ class AutoEncoder(nn.Module):
 
     def Encode(self, batch):
         batch = self.dropout(batch)
-        batch = self.reduceDim(batch)
+        userEmb = self.reduceDim(batch)
+        itemEmb = self.reduceDim2(self.item_emb).T
+        latent = torch.matmul(userEmb, itemEmb)
         # batch = self.U(batch)
 
-        return '', batch, ''
+        return '', latent, ''
 
         if self.n_cate == 1:
             hidden = self.encoder(batch)
@@ -183,8 +187,8 @@ class AutoEncoder(nn.Module):
         return eps.mul(std).add_(mu)
     
     def Decode(self, batch):
-        return self.activateF(torch.matmul(batch, self.item_emb.T))
-        # return self.activateF(self.predictItem(batch))
+        # return self.activateF(torch.matmul(self.reduceDim(batch), self.reduceDim2(self.item_emb).T))
+        return self.activateF(self.predictItem(batch))
 
         if len(self.out_dims) == 0 or self.n_cate == 1:  # one-layer decoder
             return self.decoder(batch)

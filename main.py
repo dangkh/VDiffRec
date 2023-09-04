@@ -104,8 +104,8 @@ test_path = args.data_path + 'test_list.npy'
 
 train_data, valid_y_data, test_y_data, n_user, n_item = data_utils.data_load(train_path, valid_path, test_path)
 train_dataset = data_utils.DataDiffusion(torch.FloatTensor(train_data.A))
-# train_loader = DataLoader(train_dataset, batch_size=args.batch_size, pin_memory=True, shuffle=True)
-train_loader = DataLoader(train_dataset, batch_size=args.batch_size, pin_memory=True, shuffle=False, num_workers=4, worker_init_fn=worker_init_fn)
+train_loader = DataLoader(train_dataset, batch_size=args.batch_size, pin_memory=True, shuffle=False)
+# train_loader = DataLoader(train_dataset, batch_size=args.batch_size, pin_memory=True, shuffle=False, num_workers=4, worker_init_fn=worker_init_fn)
 test_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=False)
 
 if args.tst_w_val:
@@ -136,7 +136,7 @@ diffusion = gd.GaussianDiffusion(mean_type, args.noise_schedule, \
         args.noise_scale, args.noise_min, args.noise_max, args.steps, device).to(device)
 
 ### Build MLP ###
-latent_size = in_dims[-1]
+latent_size = 2810
 mlp_out_dims = eval(args.mlp_dims) + [latent_size]
 mlp_in_dims = mlp_out_dims[::-1]
 model = DNN(mlp_in_dims, mlp_out_dims, args.emb_size, time_type="cat", norm=args.norm, act_func=args.mlp_act_func).to(device)
@@ -313,7 +313,6 @@ for epoch in range(1, args.epochs + 1):
         batch_latent_recon = terms["pred_xstart"]
 
         batch_recon = Autoencoder.Decode(batch_latent_recon)
-
         if args.anneal_steps > 0:
             lamda = max((1. - update_count / args.anneal_steps) * args.lamda, args.anneal_cap)
         else:
