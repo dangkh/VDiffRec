@@ -11,7 +11,7 @@ class ModelMeanType(enum.Enum):
 
 class GaussianDiffusion(nn.Module):
     def __init__(self, mean_type, noise_schedule, noise_scale, noise_min, noise_max,\
-            steps, device, history_num_per_term=10, beta_fixed=False):
+            steps, device, history_num_per_term=10, beta_fixed=True):
 
         self.mean_type = mean_type
         self.noise_schedule = noise_schedule
@@ -153,7 +153,6 @@ class GaussianDiffusion(nn.Module):
             weight = th.tensor([1.0] * len(target)).to(device)
 
         terms["loss"] = weight * loss
-
         if self.mean_type == ModelMeanType.START_X:
             terms["pred_xstart"] = model_output
         else:
@@ -170,9 +169,6 @@ class GaussianDiffusion(nn.Module):
                     self.Lt_history[t, self.Lt_count[t]] = loss.detach()
                     self.Lt_count[t] += 1
                 except:
-                    print(t)
-                    print(self.Lt_count[t])
-                    print(loss)
                     raise ValueError
 
         terms["loss"] /= pt
