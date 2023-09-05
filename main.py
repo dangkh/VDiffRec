@@ -46,7 +46,7 @@ parser.add_argument('--emb_path', type=str, default='../datasets/')
 parser.add_argument('--lr1', type=float, default=0.001, help='learning rate for Autoencoder')
 parser.add_argument('--lr2', type=float, default=0.0003, help='learning rate for MLP')
 parser.add_argument('--wd1', type=float, default=1e-5, help='weight decay for Autoencoder')
-parser.add_argument('--wd2', type=float, default=0.0, help='weight decay for MLP')
+parser.add_argument('--wd2', type=float, default=1e-5, help='weight decay for MLP')
 parser.add_argument('--batch_size', type=int, default=400)
 parser.add_argument('--epochs', type=int, default=1000, help='upper epoch limit')
 parser.add_argument('--topN', type=str, default='[10, 20, 50, 100]')
@@ -56,6 +56,7 @@ parser.add_argument('--gpu', type=str, default='0', help='gpu card ID')
 parser.add_argument('--save_path', type=str, default='./saved_models/', help='save model path')
 parser.add_argument('--log_name', type=str, default='log', help='the log name')
 parser.add_argument('--round', type=int, default=1, help='record the experiment')
+parser.add_argument('--maxItem', type=int, default=300, help='diffusion steps')
 
 # params for the Autoencoder
 parser.add_argument('--n_cate', type=int, default=1, help='category num of items')
@@ -105,7 +106,7 @@ test_path = args.data_path + 'test_list.npy'
 train_data, valid_y_data, test_y_data, n_user, n_item = data_utils.data_load(train_path, valid_path, test_path)
 train_dataset = data_utils.DataDiffusion(torch.FloatTensor(train_data.A))
 # train_loader = DataLoader(train_dataset, batch_size=args.batch_size, pin_memory=True, shuffle=True)
-train_loader = DataLoader(train_dataset, batch_size=args.batch_size, pin_memory=True, shuffle=False, num_workers=4, worker_init_fn=worker_init_fn)
+train_loader = DataLoader(train_dataset, batch_size=args.batch_size, pin_memory=True, shuffle=False)
 test_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=False)
 
 if args.tst_w_val:
@@ -122,7 +123,7 @@ item_emb = torch.from_numpy(np.load(emb_path, allow_pickle=True))
 assert len(item_emb) == n_item
 out_dims = eval(args.out_dims)
 in_dims = eval(args.in_dims)[::-1]
-Autoencoder = AE(item_emb, args.n_cate, in_dims, out_dims, device, args.act_func, args.reparam).to(device)
+Autoencoder = AE(item_emb, args.n_cate, in_dims, out_dims, device, args.act_func, args.maxItem, args.reparam).to(device)
 
 ### Build Gaussian Diffusion ###
 if args.mean_type == 'x0':
@@ -177,9 +178,15 @@ print("models ready.")
 def index2itemEm(itemIndx):
     output = []
     clickedItem = torch.where(itemIndx == 1)[0]
+    index = torch.randperm(len(clickedItem))
+    clickedItem = clickedItem[index]
+    counter = 0
     for ii in clickedItem:
         output.append(item_emb[ii.item()])
-    compensationNum = 1000 - len(clickedItem)
+        counter += 1
+        if counter > (args.maxItem-1):
+            break
+    compensationNum = args.maxItem -counter
     compensationFeat = torch.zeros(compensationNum*64)
     output.append(compensationFeat)
     
@@ -237,7 +244,6 @@ def evaluate(data_loader, data_te, mask_his, topN):
 
             indices = indices.cpu().numpy().tolist()
             predict_items.extend(indices)
-
     test_results = evaluate_utils.computeTopNAccuracy(target_items, predict_items, topN)
     firstEval = False
     return test_results
@@ -271,13 +277,17 @@ if args.n_cate > 1:
 else:
     mask_train = train_data
 
-print("Start training...")
 
 listBatchTrain = []
 crossELoss = torch.nn.CrossEntropyLoss()
 sfm = torch.nn.Softmax(dim = 1)
 # mseLoss = torch.nn.MSELoss()
 listSFBatch = []
+sourceFile = open('res.txt', 'a')
+print("Start training...", file = sourceFile)
+print("args:", args, file = sourceFile)
+print('*'*10, 'End' ,'*'*10, file = sourceFile)
+sourceFile.close()
 for epoch in range(1, args.epochs + 1):
     # if epoch - best_epoch >= 20:
     #     print('-'*18)
@@ -332,8 +342,7 @@ for epoch in range(1, args.epochs + 1):
         else:
             loss = elbo + lamda * vae_loss
         update_count_vae += 1
-
-        total_loss += loss
+        total_loss += loss 
         loss.backward()
         optimizer1.step()
         optimizer2.step()
@@ -341,12 +350,14 @@ for epoch in range(1, args.epochs + 1):
     update_count += 1
     
     if epoch % 5 == 0:
+        sourceFile = open('res.txt', 'a')
+        print(f"epoch: {epoch}", file = sourceFile)
         valid_results = evaluate(test_loader, valid_y_data, mask_train, eval(args.topN))
         if args.tst_w_val:
             test_results = evaluate(test_twv_loader, test_y_data, mask_tv, eval(args.topN))
         else:
             test_results = evaluate(test_loader, test_y_data, mask_tv, eval(args.topN))
-        evaluate_utils.print_results(None, valid_results, test_results)
+        evaluate_utils.print_results(None, valid_results, test_results, sourceFile)
 
         if valid_results[1][1] > best_recall: # recall@20 as selection
             best_recall, best_epoch = valid_results[1][1], epoch
@@ -364,7 +375,7 @@ for epoch in range(1, args.epochs + 1):
                 args.in_dims, args.out_dims, args.lamda, args.mlp_dims, args.emb_size, args.mean_type, args.steps, \
                 args.noise_scale, args.noise_min, args.noise_max, args.sampling_steps, args.reweight, args.log_name))
     
-    print("Runing Epoch {:03d} ".format(epoch) + 'train loss {:.4f}'.format(total_loss) + " costs " + time.strftime(
+    print("Runing Epoch {:03d} ".format(epoch) + 'train loss {:.4f} {} {}'.format(total_loss, elbo.item(), vae_loss.item()) + " costs " + time.strftime(
                         "%H: %M: %S", time.gmtime(time.time()-start_time)))
     print('---'*18)
 
@@ -377,3 +388,4 @@ print("End time: ", time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(time.time()
 
 
 
+sourceFile.close()
