@@ -117,7 +117,7 @@ mask_tv = train_data + valid_y_data
 print('data ready.')
 
 ### Build Autoencoder ###
-emb_path = args.emb_path + args.dataset + '/item_emb.npy'
+emb_path = args.emb_path + args.dataset + '/ml-1m_embed.npy'
 item_emb = torch.from_numpy(np.load(emb_path, allow_pickle=True))
 # item_emb = torch.nn.functional.normalize(item_emb, dim = 0)
 assert len(item_emb) == n_item
@@ -187,7 +187,7 @@ def index2itemEm(itemIndx):
         if counter > (args.maxItem-1):
             break
     compensationNum = args.maxItem -counter
-    compensationFeat = torch.zeros(compensationNum*64)
+    compensationFeat = torch.zeros(compensationNum*386)
     output.append(compensationFeat)
     
     return torch.cat(output)
