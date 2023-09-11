@@ -119,6 +119,10 @@ print('data ready.')
 ### Build Autoencoder ###
 emb_path = args.emb_path + args.dataset + '/ml-1m_embed.npy'
 item_emb = torch.from_numpy(np.load(emb_path, allow_pickle=True))
+mean = torch.mean(item_emb, dim = 0)
+std = torch.std(item_emb, dim = 0)
+item_emb = (item_emb - mean) / std
+
 # item_emb = torch.nn.functional.normalize(item_emb, dim = 0)
 assert len(item_emb) == n_item
 out_dims = eval(args.out_dims)
@@ -230,7 +234,8 @@ def evaluate(data_loader, data_te, mask_his, topN):
             his_data = mask_his[e_idxlist[batch_idx*args.batch_size:batch_idx*args.batch_size+len(aebatch)]]
 
             _, batch_latent, _ = Autoencoder.Encode(aebatch)
-            batch_latent_recon = diffusion.p_sample(model, batch_latent, args.sampling_steps, args.sampling_noise)
+            # batch_latent_recon = diffusion.p_sample(model, batch_latent, args.sampling_steps, args.sampling_noise)
+            batch_latent_recon = diffusion.dsampling(model, batch_latent)
             prediction = Autoencoder.Decode(batch_latent_recon)  # [batch_size, n1_items + n2_items + n3_items]
 
             prediction[his_data.nonzero()] = -np.inf  # mask ui pairs in train & validation set
@@ -317,12 +322,14 @@ for epoch in range(1, args.epochs + 1):
         batch_count += 1
         optimizer1.zero_grad()
         optimizer2.zero_grad()
-        _, batch_latent, _ = Autoencoder.Encode(aebatch)
+        _, batch_latent, vae_kl = Autoencoder.Encode(aebatch)
         terms = diffusion.training_losses(model, batch_latent, args.reweight)
         elbo = terms["loss"].mean()  # loss from diffusion
         batch_latent_recon = terms["pred_xstart"]
+        batch_latent_z = terms["t_latent"]
 
         batch_recon = Autoencoder.Decode(batch_latent_recon)
+        batch_recon_z = Autoencoder.Decode(batch_latent_z)
 
         if args.anneal_steps > 0:
             lamda = max((1. - update_count / args.anneal_steps) * args.lamda, args.anneal_cap)
@@ -335,7 +342,7 @@ for epoch in range(1, args.epochs + 1):
             anneal = args.vae_anneal_cap
 
         # vae_loss = compute_loss(batch_recon, batch) # + anneal * vae_kl  # loss from autoencoder
-        vae_loss = crossELoss(batch_recon, label)
+        vae_loss = crossELoss(batch_recon, label) + crossELoss(batch_recon_z, label) + vae_kl
 
         if args.reweight:
             loss = lamda * elbo + vae_loss
@@ -350,14 +357,14 @@ for epoch in range(1, args.epochs + 1):
     update_count += 1
     
     if epoch % 5 == 0:
-        sourceFile = open('res.txt', 'a')
-        print(f"epoch: {epoch}", file = sourceFile)
+        # sourceFile = open('res.txt', 'a')
+        # print(f"epoch: {epoch}", file = sourceFile)
         valid_results = evaluate(test_loader, valid_y_data, mask_train, eval(args.topN))
         if args.tst_w_val:
             test_results = evaluate(test_twv_loader, test_y_data, mask_tv, eval(args.topN))
         else:
             test_results = evaluate(test_loader, test_y_data, mask_tv, eval(args.topN))
-        evaluate_utils.print_results(None, valid_results, test_results, sourceFile)
+        evaluate_utils.print_results(None, valid_results, test_results, None)
 
         if valid_results[1][1] > best_recall: # recall@20 as selection
             best_recall, best_epoch = valid_results[1][1], epoch
