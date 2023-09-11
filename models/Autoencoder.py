@@ -25,7 +25,7 @@ class AutoEncoder(nn.Module):
         self.reparam = reparam
         self.dropout = nn.Dropout(dropout)
         # self.U = nn.Embedding(self.maxItem * 64, 64, max_norm=True)
-        self.reduceDim = nn.Linear(self.maxItem * 64, 64)
+        self.reduceDim = nn.Linear(self.maxItem * 64, self.in_dims[0])
         # self.decodeDim = nn.Linear(self.in_dims[0], self.maxItem * 64)
         self.predictItem = nn.Linear(self.in_dims[0], self.n_item)
         self.activateF = nn.Sigmoid()
@@ -46,8 +46,8 @@ class AutoEncoder(nn.Module):
         return eps.mul(std).add_(mu)
     
     def Decode(self, batch):
-        return self.activateF(torch.matmul(batch, self.item_emb.T))
-        # return self.activateF(self.predictItem(batch))
+        # return self.activateF(torch.matmul(batch, self.item_emb.T))
+        return self.activateF(self.predictItem(batch))
     
 def compute_loss(recon_x, x):
     mask = torch.where(x!= 0)

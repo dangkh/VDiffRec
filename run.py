@@ -6,3 +6,4 @@ python main.py --reweight=1 --log_name=log --round=1 --dataset=ml-1m_noisy --dat
 
 # !python main.py --lamda 0.01 --dataset=ml-1m_clean --data_path=../datasets/ml-1m_clean/ --batch_size=400  --emb_size=10 --noise_scale 0.001 --mean_type=eps --steps=40 --noise_min=0.005 --noise_max=0.02 --sampling_steps=0 --reweight=1 --log_name=log --round=1 --cuda --gpu=0
 # recall = 
+# python main.py --lamda 0.03 --dataset=ml-1m_clean --data_path=../datasets/ml-1m_clean/ --batch_size=400  --emb_size=32 --noise_scale 0.001 --mean_type=eps --steps=40 --noise_min=0.005 --noise_max=0.02 --sampling_steps=0 --reweight=1 --log_name=log --round=1 --cuda --gpu=0

@@ -60,7 +60,7 @@ parser.add_argument('--maxItem', type=int, default=300, help='diffusion steps')
 
 # params for the Autoencoder
 parser.add_argument('--n_cate', type=int, default=1, help='category num of items')
-parser.add_argument('--in_dims', type=str, default='[64]', help='the dims for the encoder')
+parser.add_argument('--in_dims', type=str, default='[300]', help='the dims for the encoder')
 parser.add_argument('--out_dims', type=str, default='[]', help='the hidden dims for the decoder')
 parser.add_argument('--act_func', type=str, default='tanh', help='activation function for autoencoder')
 parser.add_argument('--lamda', type=float, default=0.05, help='hyper-parameter of multinomial log-likelihood for AE: 0.01, 0.02, 0.03, 0.05')
@@ -73,7 +73,7 @@ parser.add_argument('--reparam', type=bool, default=True, help="Autoencoder with
 
 # params for the MLP
 parser.add_argument('--time_type', type=str, default='cat', help='cat or add')
-parser.add_argument('--mlp_dims', type=str, default='[30]', help='the dims for the DNN')
+parser.add_argument('--mlp_dims', type=str, default='[300]', help='the dims for the DNN')
 parser.add_argument('--norm', type=bool, default=False, help='Normalize the input or not')
 parser.add_argument('--emb_size', type=int, default=10, help='timestep embedding size')
 parser.add_argument('--mlp_act_func', type=str, default='tanh', help='the activation function for MLP')
@@ -230,7 +230,7 @@ def evaluate(data_loader, data_te, mask_his, topN):
             his_data = mask_his[e_idxlist[batch_idx*args.batch_size:batch_idx*args.batch_size+len(aebatch)]]
 
             _, batch_latent, _ = Autoencoder.Encode(aebatch)
-            batch_latent_recon = diffusion.p_sample(model, batch_latent, args.sampling_steps, args.sampling_noise)
+            batch_latent_recon = diffusion.p_sample(model, batch_latent, args.steps // 2, args.sampling_noise)
             prediction = Autoencoder.Decode(batch_latent_recon)  # [batch_size, n1_items + n2_items + n3_items]
 
             prediction[his_data.nonzero()] = -np.inf  # mask ui pairs in train & validation set
@@ -320,8 +320,9 @@ for epoch in range(1, args.epochs + 1):
         _, batch_latent, _ = Autoencoder.Encode(aebatch)
         terms = diffusion.training_losses(model, batch_latent, args.reweight)
         elbo = terms["loss"].mean()  # loss from diffusion
-        batch_latent_recon = terms["pred_xstart"]
-
+        # batch_latent_recon = terms["z_latent"] 
+        batch_latent_recon = 0.5 * (terms["z_latent"] + terms["pred_xstart"])
+        # terms["z_latent"]
         batch_recon = Autoencoder.Decode(batch_latent_recon)
 
         if args.anneal_steps > 0:
@@ -350,14 +351,14 @@ for epoch in range(1, args.epochs + 1):
     update_count += 1
     
     if epoch % 5 == 0:
-        sourceFile = open('res.txt', 'a')
-        print(f"epoch: {epoch}", file = sourceFile)
+        # sourceFile = open('res.txt', 'a')
+        # print(f"epoch: {epoch}", file = sourceFile)
         valid_results = evaluate(test_loader, valid_y_data, mask_train, eval(args.topN))
         if args.tst_w_val:
             test_results = evaluate(test_twv_loader, test_y_data, mask_tv, eval(args.topN))
         else:
             test_results = evaluate(test_loader, test_y_data, mask_tv, eval(args.topN))
-        evaluate_utils.print_results(None, valid_results, test_results, sourceFile)
+        evaluate_utils.print_results(None, valid_results, test_results, None)
 
         if valid_results[1][1] > best_recall: # recall@20 as selection
             best_recall, best_epoch = valid_results[1][1], epoch

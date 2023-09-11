@@ -119,6 +119,16 @@ class GaussianDiffusion(nn.Module):
                 x_t = out["mean"]
         return x_t
     
+    def dsampling(self, x_start):
+        batch_size, device = x_start.size(0), x_start.device
+        ts, pt = self.sample_timesteps(batch_size, device, 'importance')
+        noise = th.randn_like(x_start)
+        if self.noise_scale != 0.:
+            x_t = self.q_sample(x_start, ts, noise)
+        else:
+            x_t = x_start
+        return x_t
+
     def training_losses(self, model, x_start, reweight=False):
         batch_size, device = x_start.size(0), x_start.device
         ts, pt = self.sample_timesteps(batch_size, device, 'importance')
@@ -153,6 +163,8 @@ class GaussianDiffusion(nn.Module):
             weight = th.tensor([1.0] * len(target)).to(device)
 
         terms["loss"] = weight * loss
+
+        terms["z_latent"] = x_t
 
         if self.mean_type == ModelMeanType.START_X:
             terms["pred_xstart"] = model_output
