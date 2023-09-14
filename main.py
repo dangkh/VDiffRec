@@ -44,9 +44,9 @@ parser.add_argument('--dataset', type=str, default='ml-1m_clean', help='choose t
 parser.add_argument('--data_path', type=str, default='../datasets/', help='load data path')
 parser.add_argument('--emb_path', type=str, default='../datasets/')
 parser.add_argument('--lr1', type=float, default=0.001, help='learning rate for Autoencoder')
-parser.add_argument('--lr2', type=float, default=0.0003, help='learning rate for MLP')
+parser.add_argument('--lr2', type=float, default=0.0001, help='learning rate for MLP')
 parser.add_argument('--wd1', type=float, default=1e-5, help='weight decay for Autoencoder')
-parser.add_argument('--wd2', type=float, default=1e-5, help='weight decay for MLP')
+parser.add_argument('--wd2', type=float, default=0, help='weight decay for MLP')
 parser.add_argument('--batch_size', type=int, default=400)
 parser.add_argument('--epochs', type=int, default=1000, help='upper epoch limit')
 parser.add_argument('--topN', type=str, default='[10, 20, 50, 100]')
@@ -56,7 +56,7 @@ parser.add_argument('--gpu', type=str, default='0', help='gpu card ID')
 parser.add_argument('--save_path', type=str, default='./saved_models/', help='save model path')
 parser.add_argument('--log_name', type=str, default='log', help='the log name')
 parser.add_argument('--round', type=int, default=1, help='record the experiment')
-parser.add_argument('--maxItem', type=int, default=300, help='diffusion steps')
+parser.add_argument('--maxItem', type=int, default=1000, help='diffusion steps')
 
 # params for the Autoencoder
 parser.add_argument('--n_cate', type=int, default=1, help='category num of items')
@@ -102,23 +102,24 @@ print("Starting time: ", time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(time.t
 train_path = args.data_path + 'train_list.npy'
 valid_path = args.data_path + 'valid_list.npy'
 test_path = args.data_path + 'test_list.npy'
+emb_path = args.emb_path + args.dataset + '/item_emb.npy'
+item_emb = torch.from_numpy(np.load(emb_path, allow_pickle=True))
+
 
 train_data, valid_y_data, test_y_data, n_user, n_item = data_utils.data_load(train_path, valid_path, test_path)
-train_dataset = data_utils.DataDiffusion(torch.FloatTensor(train_data.A))
-# train_loader = DataLoader(train_dataset, batch_size=args.batch_size, pin_memory=True, shuffle=True)
+train_dataset = data_utils.DataDiffusion(torch.FloatTensor(train_data.A), item_emb, args.maxItem)
 train_loader = DataLoader(train_dataset, batch_size=args.batch_size, pin_memory=True, shuffle=False)
 test_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=False)
 
 if args.tst_w_val:
-    tv_dataset = data_utils.DataDiffusion(torch.FloatTensor(train_data.A) + torch.FloatTensor(valid_y_data.A))
+    tv_dataset = data_utils.DataDiffusion(torch.FloatTensor(train_data.A) + torch.FloatTensor(valid_y_data.A), item_emb, args.maxItem)
     test_twv_loader = DataLoader(tv_dataset, batch_size=args.batch_size, shuffle=False)
 mask_tv = train_data + valid_y_data
 
 print('data ready.')
 
 ### Build Autoencoder ###
-emb_path = args.emb_path + args.dataset + '/item_emb.npy'
-item_emb = torch.from_numpy(np.load(emb_path, allow_pickle=True))
+
 # item_emb = torch.nn.functional.normalize(item_emb, dim = 0)
 assert len(item_emb) == n_item
 out_dims = eval(args.out_dims)
@@ -140,7 +141,7 @@ diffusion = gd.GaussianDiffusion(mean_type, args.noise_schedule, \
 latent_size = in_dims[-1]
 mlp_out_dims = eval(args.mlp_dims) + [latent_size]
 mlp_in_dims = mlp_out_dims[::-1]
-model = DNN(mlp_in_dims, mlp_out_dims, args.emb_size, time_type="cat", norm=args.norm, act_func=args.mlp_act_func).to(device)
+model = DNN(mlp_in_dims, mlp_out_dims, args.emb_size, time_type="cat", norm=args.norm).to(device)
 
 param_num = 0
 AE_num = sum([param.nelement() for param in Autoencoder.parameters()])
@@ -175,35 +176,7 @@ elif args.optimizer2 == 'Momentum':
 print("models ready.")
 
 
-def index2itemEm(itemIndx):
-    output = []
-    clickedItem = torch.where(itemIndx == 1)[0]
-    index = torch.randperm(len(clickedItem))
-    clickedItem = clickedItem[index]
-    counter = 0
-    for ii in clickedItem:
-        output.append(item_emb[ii.item()])
-        counter += 1
-        if counter > (args.maxItem-1):
-            break
-    compensationNum = args.maxItem -counter
-    compensationFeat = torch.zeros(compensationNum*64)
-    output.append(compensationFeat)
-    
-    return torch.cat(output)
-
-
-def batch2itemEmb(batch):
-    rBatch = []
-    for ii in range(len(batch)):
-        rBatch.append(index2itemEm(batch[ii]))
-    return torch.vstack(rBatch).to(device)
-
-firstEval = True
-listBatchTest = []
 def evaluate(data_loader, data_te, mask_his, topN):
-    global firstEval
-    global listBatchTest
     model.eval()
     Autoencoder.eval()
     e_idxlist = list(range(mask_his.shape[0]))
@@ -214,38 +187,25 @@ def evaluate(data_loader, data_te, mask_his, topN):
     for i in range(e_N):
         target_items.append(data_te[i, :].nonzero()[1].tolist())
     
-    if args.n_cate > 1:
-        category_map = Autoencoder.category_map.to(device)
     
     with torch.no_grad():
-        for batch_idx, batch in enumerate(data_loader):
-            if firstEval:
-                aebatch = batch2itemEmb(batch)
-                listBatchTest.append(aebatch)
-            else:
-                aebatch = listBatchTest[batch_idx]
-            aebatch = aebatch.to(device)
+        for batch_idx, (batch, embed, _) in enumerate(data_loader):
+            embed = embed.to(device)
             batch = batch.to(device)
             # mask map
-            his_data = mask_his[e_idxlist[batch_idx*args.batch_size:batch_idx*args.batch_size+len(aebatch)]]
+            his_data = mask_his[e_idxlist[batch_idx*args.batch_size:batch_idx*args.batch_size+len(embed)]]
 
-            _, batch_latent, _ = Autoencoder.Encode(aebatch)
-            batch_latent_recon = diffusion.p_sample(model, batch_latent, args.steps // 2, args.sampling_noise)
+            _, batch_latent, _ = Autoencoder.Encode(embed)
+            batch_latent_recon = diffusion.p_sample(model, batch_latent, args.steps, args.sampling_noise)
             prediction = Autoencoder.Decode(batch_latent_recon)  # [batch_size, n1_items + n2_items + n3_items]
 
             prediction[his_data.nonzero()] = -np.inf  # mask ui pairs in train & validation set
 
-            _, mapped_indices = torch.topk(prediction, topN[-1])  # topk category idx
-
-            if args.n_cate > 1:
-                indices = category_map[mapped_indices]
-            else:
-                indices = mapped_indices
+            _, indices = torch.topk(prediction, topN[-1])  # topk category idx
 
             indices = indices.cpu().numpy().tolist()
             predict_items.extend(indices)
     test_results = evaluate_utils.computeTopNAccuracy(target_items, predict_items, topN)
-    firstEval = False
     return test_results
 
 best_recall, best_epoch = -100, 0
@@ -254,33 +214,10 @@ update_count = 0
 update_count_vae = 0
 save_path = args.save_path + args.dataset + '/'
 
-if args.n_cate > 1:
-    start_time = time.time()
-    category_map = Autoencoder.category_map.cpu().numpy()
-    reverse_map = {category_map[i]:i for i in range(len(category_map))}
-    # mask for validation: train_dataset
-    mask_idx_train = list(train_data.nonzero())
-    mapped_mask_iid_train = np.array([reverse_map[mask_idx_train[1][i]] for i in range(len(mask_idx_train[0]))])
-    mask_train = sp.csr_matrix((np.ones_like(mask_idx_train[0]), (mask_idx_train[0], mapped_mask_iid_train)), \
-        dtype='float64', shape=(n_user, n_item))
-
-    # mask for test: train_dataset + valid_dataset
-    mask_idx_val = list(valid_y_data.nonzero())  # valid dataset
-    mapped_mask_iid_val = np.array([reverse_map[mask_idx_val[1][i]] for i in range(len(mask_idx_val[0]))])
-    mask_val = sp.csr_matrix((np.ones_like(mask_idx_val[0]), (mask_idx_val[0], mapped_mask_iid_val)), \
-        dtype='float64', shape=(n_user, n_item))
-
-    mask_tv = mask_train + mask_val
-
-    print("Preparing mask for validation & test costs " + time.strftime(
-                            "%H: %M: %S", time.gmtime(time.time()-start_time)))
-else:
-    mask_train = train_data
+mask_train = train_data
 
 
-listBatchTrain = []
 crossELoss = torch.nn.CrossEntropyLoss()
-sfm = torch.nn.Softmax(dim = 1)
 # mseLoss = torch.nn.MSELoss()
 listSFBatch = []
 sourceFile = open('res.txt', 'a')
@@ -302,22 +239,14 @@ for epoch in range(1, args.epochs + 1):
     batch_count = 0
     total_loss = 0.0
     
-    for batch_idx, batch in enumerate(train_loader):
-        if epoch == 1:
-            aebatch = batch2itemEmb(batch)
-            listBatchTrain.append(aebatch)
-            label = sfm(batch)
-            listSFBatch.append(label)
-        else:
-            aebatch = listBatchTrain[batch_idx]
-            label = listSFBatch[batch_idx]
-        aebatch = aebatch.to(device)
+    for batch_idx, (batch, embed, label) in enumerate(train_loader):
+        embed = embed.to(device)
         batch = batch.to(device)
         label = label.to(device)
         batch_count += 1
         optimizer1.zero_grad()
         optimizer2.zero_grad()
-        _, batch_latent, _ = Autoencoder.Encode(aebatch)
+        _, batch_latent, _ = Autoencoder.Encode(embed)
         terms = diffusion.training_losses(model, batch_latent, args.reweight)
         elbo = terms["loss"].mean()  # loss from diffusion
         # batch_latent_recon = terms["z_latent"] 

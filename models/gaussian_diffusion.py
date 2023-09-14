@@ -119,16 +119,6 @@ class GaussianDiffusion(nn.Module):
                 x_t = out["mean"]
         return x_t
     
-    def dsampling(self, x_start):
-        batch_size, device = x_start.size(0), x_start.device
-        ts, pt = self.sample_timesteps(batch_size, device, 'importance')
-        noise = th.randn_like(x_start)
-        if self.noise_scale != 0.:
-            x_t = self.q_sample(x_start, ts, noise)
-        else:
-            x_t = x_start
-        return x_t
-
     def training_losses(self, model, x_start, reweight=False):
         batch_size, device = x_start.size(0), x_start.device
         ts, pt = self.sample_timesteps(batch_size, device, 'importance')
@@ -155,7 +145,7 @@ class GaussianDiffusion(nn.Module):
                 weight = th.where((ts == 0), 1.0, weight)
                 loss = mse
             elif self.mean_type == ModelMeanType.EPSILON:
-                weight = (1 - self.alphas_cumprod[ts]) / ((1-self.alphas_cumprod_prev[ts]**2) * (1-self.betas[ts]) * 2)
+                weight = (1 - self.alphas_cumprod[ts]) / (2 * (1-self.alphas_cumprod_prev[ts]**2) * (1-self.betas[ts]))
                 weight = th.where((ts == 0), 1.0, weight)
                 likelihood = mean_flat((x_start - self._predict_xstart_from_eps(x_t, ts, model_output))**2 / 2.0)
                 loss = th.where((ts == 0), likelihood, mse)
@@ -220,6 +210,8 @@ class GaussianDiffusion(nn.Module):
         if noise is None:
             noise = th.randn_like(x_start)
         assert noise.shape == x_start.shape
+        print(noise.shape)
+        stop
         return (
             self._extract_into_tensor(self.sqrt_alphas_cumprod, t, x_start.shape) * x_start
             + self._extract_into_tensor(self.sqrt_one_minus_alphas_cumprod, t, x_start.shape)

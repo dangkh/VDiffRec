@@ -14,10 +14,10 @@ class DNN(nn.Module):
         self.in_dims = in_dims
         self.out_dims = out_dims
         assert out_dims[0] == in_dims[-1], "In and out dimensions must equal to each other."
-        self.time_emb_dim = emb_size
         self.time_type = time_type
+        self.time_emb_dim = emb_size
         self.norm = norm
-        
+
         self.emb_layer = nn.Linear(self.time_emb_dim, self.time_emb_dim)
 
         if self.time_type == "cat":
@@ -25,52 +25,61 @@ class DNN(nn.Module):
         else:
             raise ValueError("Unimplemented timestep embedding type %s" % self.time_type)
         out_dims_temp = self.out_dims
+        
+        self.in_layers = nn.ModuleList([nn.Linear(d_in, d_out) \
+            for d_in, d_out in zip(in_dims_temp[:-1], in_dims_temp[1:])])
+        self.out_layers = nn.ModuleList([nn.Linear(d_in, d_out) \
+            for d_in, d_out in zip(out_dims_temp[:-1], out_dims_temp[1:])])
+        
+        self.drop = nn.Dropout(dropout)
+        self.init_weights()
+    
+    def init_weights(self):
+        for layer in self.in_layers:
+            # Xavier Initialization for weights
+            size = layer.weight.size()
+            fan_out = size[0]
+            fan_in = size[1]
+            std = np.sqrt(2.0 / (fan_in + fan_out))
+            layer.weight.data.normal_(0.0, std)
 
-        self.in_modules = []
-        for d_in, d_out in zip(in_dims_temp[:-1], in_dims_temp[1:]):
-            self.in_modules.append(nn.Linear(d_in, d_out))
-            if act_func == 'tanh':
-                self.in_modules.append(nn.Tanh())
-            elif act_func == 'relu':
-                self.in_modules.append(nn.ReLU())
-            elif act_func == 'sigmoid':
-                self.in_modules.append(nn.Sigmoid())
-            elif act_func == 'leaky_relu':
-                self.in_modules.append(nn.LeakyReLU())
-            else:
-                raise ValueError
-        self.in_layers = nn.Sequential(*self.in_modules)
+            # Normal Initialization for weights
+            layer.bias.data.normal_(0.0, 0.001)
+        
+        for layer in self.out_layers:
+            # Xavier Initialization for weights
+            size = layer.weight.size()
+            fan_out = size[0]
+            fan_in = size[1]
+            std = np.sqrt(2.0 / (fan_in + fan_out))
+            layer.weight.data.normal_(0.0, std)
 
-        self.out_modules = []
-        for d_in, d_out in zip(out_dims_temp[:-1], out_dims_temp[1:]):
-            self.out_modules.append(nn.Linear(d_in, d_out))
-            if act_func == 'tanh':
-                self.out_modules.append(nn.Tanh())
-            elif act_func == 'relu':
-                self.out_modules.append(nn.ReLU())
-            elif act_func == 'sigmoid':
-                self.out_modules.append(nn.Sigmoid())
-            elif act_func == 'leaky_relu':
-                self.out_modules.append(nn.LeakyReLU())
-            else:
-                raise ValueError
-        self.out_modules.pop()
-        self.out_layers = nn.Sequential(*self.out_modules)
-
-        self.dropout = nn.Dropout(dropout)
-
-        self.apply(xavier_normal_initialization)
+            # Normal Initialization for weights
+            layer.bias.data.normal_(0.0, 0.001)
+        
+        size = self.emb_layer.weight.size()
+        fan_out = size[0]
+        fan_in = size[1]
+        std = np.sqrt(2.0 / (fan_in + fan_out))
+        self.emb_layer.weight.data.normal_(0.0, std)
+        self.emb_layer.bias.data.normal_(0.0, 0.001)
     
     def forward(self, x, timesteps):
         time_emb = timestep_embedding(timesteps, self.time_emb_dim).to(x.device)
         emb = self.emb_layer(time_emb)
         if self.norm:
-            x = F.normalize(x, dim=-1)
-        x = self.dropout(x)
+            x = F.normalize(x)
+        x = self.drop(x)
         h = torch.cat([x, emb], dim=-1)
-        h = self.in_layers(h)
-        h = self.out_layers(h)
-
+        for i, layer in enumerate(self.in_layers):
+            h = layer(h)
+            h = torch.tanh(h)
+        
+        for i, layer in enumerate(self.out_layers):
+            h = layer(h)
+            if i != len(self.out_layers) - 1:
+                h = torch.tanh(h)
+        
         return h
 
 def timestep_embedding(timesteps, dim, max_period=10000):
