@@ -149,6 +149,14 @@ class DataDiffusion(Dataset):
         for ii in range(len(self.data)):
             self.userEmb.append(self.index2itemEm(data[ii]))
         self.userEmb = torch.vstack(self.userEmb)
+        self.pos = []
+        for line in self.data:
+            ll = torch.where(line == 1)[0]
+            lenLL = len(ll)
+            compensation = len(self.data[0]) - lenLL
+            lcom = torch.zeros(compensation)
+            newLL = torch.cat((ll, lcom), 0)
+            self.pos.append([lenLL, newLL])
 
     def index2itemEm(self, itemIndx):
         output = []
@@ -170,7 +178,7 @@ class DataDiffusion(Dataset):
         item = self.data[index]
         embed = self.userEmb[index]
         label = self.label[index]
-        return item, embed, label
+        return item, embed, label, self.pos[index]
 
     def __len__(self):
         return len(self.data)

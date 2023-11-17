@@ -117,7 +117,6 @@ if args.tst_w_val:
 mask_tv = train_data + valid_y_data
 
 print('data ready.')
-
 ### Build Autoencoder ###
 
 # item_emb = torch.nn.functional.normalize(item_emb, dim = 0)
@@ -140,7 +139,7 @@ diffusion = gd.GaussianDiffusion(mean_type, args.noise_schedule, \
         args.noise_scale, args.noise_min, args.noise_max, args.steps, device).to(device)
 
 ### Build MLP ###
-latent_size = in_dims[-1]
+latent_size = in_dims[0]
 mlp_out_dims = eval(args.mlp_dims) + [latent_size]
 mlp_in_dims = mlp_out_dims[::-1]
 model = DNN(mlp_in_dims, mlp_out_dims, args.emb_size, time_type="cat", norm=args.norm).to(device)
@@ -190,15 +189,33 @@ def evaluate(data_loader, data_te, mask_his, topN):
     
     
     with torch.no_grad():
-        for batch_idx, (batch, embed, _) in enumerate(data_loader):
+        for batch_idx, (batch, embed, _, pos) in enumerate(train_loader):
+            lpos, dpos = pos
+            batchMask = np.ones_like(batch)
+        
+            # for itemBatch in range(len(batchMask)):
+            #     lenLL = lpos[itemBatch]
+            #     LL = dpos[itemBatch]
+            #     mPos1 = LL[random.randint(0,lenLL)]
+            #     mPos2 = LL[random.randint(0,lenLL)]
+            #     batchMask[itemBatch][int(mPos1.item())] = 0
+            #     batchMask[itemBatch][int(mPos2.item())] = 0
+
+            maskedItem = np.ones_like(batchMask) - batchMask
+            maskedBatch = torch.from_numpy(maskedItem) * batch
+            remaindItem = torch.from_numpy(batchMask) * batch
+
             embed = embed.to(device)
             batch = batch.to(device)
+
             # mask map
             his_data = mask_his[e_idxlist[batch_idx*args.batch_size:batch_idx*args.batch_size+len(embed)]]
 
-            prediction, mu, logvar = Autoencoder(batch)
-            # batch_latent_recon = diffusion.p_sample(model, batch_latent, args.steps, args.sampling_noise)
-            # prediction = Autoencoder.Decode(batch_latent)  # [batch_size, n1_items + n2_items + n3_items]
+            batch_encode, mu, logvar = Autoencoder.get_encode(batch)
+            batch_Mask_encode, mu_Mask, logvar_Mask = Autoencoder.get_encode(maskedBatch)
+            
+            batch_latent_recon = diffusion.p_sample(model, batch_encode, args.steps, args.sampling_noise, batch_Mask_encode)
+            prediction = Autoencoder.decode(batch_latent_recon)  # [batch_size, n1_items + n2_items + n3_items]
 
             prediction[his_data.nonzero()] = -np.inf  # mask ui pairs in train & validation set
 
@@ -239,20 +256,38 @@ for epoch in range(1, args.epochs + 1):
 
     batch_count = 0
     total_loss = 0.0
-    for batch_idx, (batch, embed, label) in enumerate(train_loader):
+    for batch_idx, (batch, embed, label, pos) in enumerate(train_loader):
+        lpos, dpos = pos
+        batchMask = np.ones_like(batch)
+        for itemBatch in range(len(batchMask)):
+            lenLL = lpos[itemBatch]
+            LL = dpos[itemBatch]
+            mPos1 = LL[random.randint(0,lenLL)]
+            # mPos2 = LL[random.randint(0,lenLL)]
+            batchMask[itemBatch][int(mPos1.item())] = 0
+            # batchMask[itemBatch][int(mPos2.item())] = 0
+
+        maskedItem = np.ones_like(batchMask) - batchMask
+        maskedBatch = torch.from_numpy(maskedItem) * batch
+        remaindItem = torch.from_numpy(batchMask) * batch
+
         embed = embed.to(device)
         batch = batch.to(device)
         label = label.to(device)
         batch_count += 1
         optimizer1.zero_grad()
-        # optimizer2.zero_grad()
-        batch_recon, mu, logvar = Autoencoder(batch)
-        # terms = diffusion.training_losses(model, batch_latent, args.reweight)
-        # elbo = terms["loss"].mean()  # loss from diffusion
+        optimizer2.zero_grad()
+        
+        batch_encode, mu, logvar = Autoencoder.get_encode(remaindItem)
+
+        batch_Mask_encode, mu_Mask, logvar_Mask = Autoencoder.get_encode(maskedBatch)
+
+        terms = diffusion.training_losses(model, batch_encode, args.reweight, batch_Mask_encode)
+        elbo = terms["loss"].mean()  # loss from diffusion
         # # batch_latent_recon = terms["z_latent"] 
-        # batch_latent_recon = 0.5 * (terms["z_latent"] + terms["pred_xstart"])
+        batch_latent_recon =terms["pred_xstart"]
         # terms["z_latent"]
-        # batch_recon = Autoencoder.Decode(batch_latent)
+        batch_recon = Autoencoder.decode(batch_latent_recon)
 
         # if args.anneal_steps > 0:
         #     lamda = max((1. - update_count / args.anneal_steps) * args.lamda, args.anneal_cap)
@@ -264,7 +299,7 @@ for epoch in range(1, args.epochs + 1):
         # else:
         #     anneal = args.vae_anneal_cap
 
-        loss = loss_function(batch_recon, batch, mu, logvar) # + anneal * vae_kl  # loss from autoencoder
+        loss = loss_function(batch_recon, batch, mu, logvar) * 0.02 + elbo # + anneal * vae_kl  # loss from autoencoder
         # vae_loss = crossELoss(batch_recon, label)
 
 
@@ -276,7 +311,7 @@ for epoch in range(1, args.epochs + 1):
         loss.backward()
         total_loss += loss.item() 
         optimizer1.step()
-        # optimizer2.step()
+        optimizer2.step()
 
     update_count += 1
     

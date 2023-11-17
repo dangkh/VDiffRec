@@ -42,6 +42,13 @@ class AutoEncoder(nn.Module):
         z = self.reparameterize(mu, logvar)
         return self.decode(z), mu, logvar
     
+
+    def get_encode(self, input):
+        mu, logvar = self.encode(input)
+        z = self.reparameterize(mu, logvar)
+        return z, mu, logvar
+
+
     def encode(self, input):
         h = F.normalize(input)
         h = self.drop(h)
