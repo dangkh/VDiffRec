@@ -20,7 +20,7 @@ import scipy.sparse as sp
 
 import models.gaussian_diffusion as gd
 from models.Autoencoder import AutoEncoder as AE
-from models.Autoencoder import compute_loss
+from models.Autoencoder import loss_function
 from models.DNN import DNN
 import evaluate_utils
 import data_utils
@@ -60,7 +60,7 @@ parser.add_argument('--maxItem', type=int, default=1000, help='diffusion steps')
 
 # params for the Autoencoder
 parser.add_argument('--n_cate', type=int, default=1, help='category num of items')
-parser.add_argument('--in_dims', type=str, default='[300]', help='the dims for the encoder')
+parser.add_argument('--in_dims', type=str, default='[200, 600]', help='the dims for the encoder')
 parser.add_argument('--out_dims', type=str, default='[]', help='the hidden dims for the decoder')
 parser.add_argument('--act_func', type=str, default='tanh', help='activation function for autoencoder')
 parser.add_argument('--lamda', type=float, default=0.05, help='hyper-parameter of multinomial log-likelihood for AE: 0.01, 0.02, 0.03, 0.05')
@@ -123,8 +123,10 @@ print('data ready.')
 # item_emb = torch.nn.functional.normalize(item_emb, dim = 0)
 assert len(item_emb) == n_item
 out_dims = eval(args.out_dims)
-in_dims = eval(args.in_dims)[::-1]
-Autoencoder = AE(item_emb, args.n_cate, in_dims, out_dims, device, args.act_func, args.maxItem, args.reparam).to(device)
+in_dims = eval(args.in_dims)
+in_dims.append(n_item)
+
+Autoencoder = AE(in_dims).to(device)
 
 ### Build Gaussian Diffusion ###
 if args.mean_type == 'x0':
@@ -148,8 +150,7 @@ AE_num = sum([param.nelement() for param in Autoencoder.parameters()])
 mlp_num = sum([param.nelement() for param in model.parameters()])
 diff_num = sum([param.nelement() for param in diffusion.parameters()])  # 0
 param_num = AE_num + mlp_num + diff_num
-print("Number of parameters:", param_num)
-
+print("Number of parameters:", param_num, AE_num)
 if args.optimizer1 == 'Adagrad':
     optimizer1 = optim.Adagrad(
         Autoencoder.parameters(), lr=args.lr1, initial_accumulator_value=1e-8, weight_decay=args.wd1)
@@ -195,9 +196,9 @@ def evaluate(data_loader, data_te, mask_his, topN):
             # mask map
             his_data = mask_his[e_idxlist[batch_idx*args.batch_size:batch_idx*args.batch_size+len(embed)]]
 
-            _, batch_latent, _ = Autoencoder.Encode(embed)
-            batch_latent_recon = diffusion.p_sample(model, batch_latent, args.steps, args.sampling_noise)
-            prediction = Autoencoder.Decode(batch_latent_recon)  # [batch_size, n1_items + n2_items + n3_items]
+            prediction, mu, logvar = Autoencoder(batch)
+            # batch_latent_recon = diffusion.p_sample(model, batch_latent, args.steps, args.sampling_noise)
+            # prediction = Autoencoder.Decode(batch_latent)  # [batch_size, n1_items + n2_items + n3_items]
 
             prediction[his_data.nonzero()] = -np.inf  # mask ui pairs in train & validation set
 
@@ -226,10 +227,10 @@ print("args:", args, file = sourceFile)
 print('*'*10, 'End' ,'*'*10, file = sourceFile)
 sourceFile.close()
 for epoch in range(1, args.epochs + 1):
-    # if epoch - best_epoch >= 20:
-    #     print('-'*18)
-    #     print('Exiting from training early')
-    #     break
+    if epoch - best_epoch >= 20:
+        print('-'*18)
+        print('Exiting from training early')
+        break
 
     Autoencoder.train()
     model.train()
@@ -238,44 +239,44 @@ for epoch in range(1, args.epochs + 1):
 
     batch_count = 0
     total_loss = 0.0
-    
     for batch_idx, (batch, embed, label) in enumerate(train_loader):
         embed = embed.to(device)
         batch = batch.to(device)
         label = label.to(device)
         batch_count += 1
         optimizer1.zero_grad()
-        optimizer2.zero_grad()
-        _, batch_latent, _ = Autoencoder.Encode(embed)
-        terms = diffusion.training_losses(model, batch_latent, args.reweight)
-        elbo = terms["loss"].mean()  # loss from diffusion
-        # batch_latent_recon = terms["z_latent"] 
-        batch_latent_recon = 0.5 * (terms["z_latent"] + terms["pred_xstart"])
+        # optimizer2.zero_grad()
+        batch_recon, mu, logvar = Autoencoder(batch)
+        # terms = diffusion.training_losses(model, batch_latent, args.reweight)
+        # elbo = terms["loss"].mean()  # loss from diffusion
+        # # batch_latent_recon = terms["z_latent"] 
+        # batch_latent_recon = 0.5 * (terms["z_latent"] + terms["pred_xstart"])
         # terms["z_latent"]
-        batch_recon = Autoencoder.Decode(batch_latent_recon)
+        # batch_recon = Autoencoder.Decode(batch_latent)
 
-        if args.anneal_steps > 0:
-            lamda = max((1. - update_count / args.anneal_steps) * args.lamda, args.anneal_cap)
-        else:
-            lamda = max(args.lamda, args.anneal_cap)
+        # if args.anneal_steps > 0:
+        #     lamda = max((1. - update_count / args.anneal_steps) * args.lamda, args.anneal_cap)
+        # else:
+        #     lamda = max(args.lamda, args.anneal_cap)
         
-        if args.vae_anneal_steps > 0:
-            anneal = min(args.vae_anneal_cap, 1. * update_count_vae / args.vae_anneal_steps)
-        else:
-            anneal = args.vae_anneal_cap
+        # if args.vae_anneal_steps > 0:
+        #     anneal = min(args.vae_anneal_cap, 1. * update_count_vae / args.vae_anneal_steps)
+        # else:
+        #     anneal = args.vae_anneal_cap
 
-        # vae_loss = compute_loss(batch_recon, batch) # + anneal * vae_kl  # loss from autoencoder
-        vae_loss = crossELoss(batch_recon, label)
+        loss = loss_function(batch_recon, batch, mu, logvar) # + anneal * vae_kl  # loss from autoencoder
+        # vae_loss = crossELoss(batch_recon, label)
 
-        if args.reweight:
-            loss = lamda * elbo + vae_loss
-        else:
-            loss = elbo + lamda * vae_loss
-        update_count_vae += 1
-        total_loss += loss 
+
+        # if args.reweight:
+        #     loss = lamda * elbo + vae_loss
+        # else:
+        #     loss = elbo + lamda * vae_loss
+        # update_count_vae += 1
         loss.backward()
+        total_loss += loss.item() 
         optimizer1.step()
-        optimizer2.step()
+        # optimizer2.step()
 
     update_count += 1
     
@@ -305,7 +306,7 @@ for epoch in range(1, args.epochs + 1):
                 args.in_dims, args.out_dims, args.lamda, args.mlp_dims, args.emb_size, args.mean_type, args.steps, \
                 args.noise_scale, args.noise_min, args.noise_max, args.sampling_steps, args.reweight, args.log_name))
     
-    print("Runing Epoch {:03d} ".format(epoch) + 'train loss {:.4f} {} {}'.format(total_loss, elbo.item(), vae_loss.item()) + " costs " + time.strftime(
+    print("Runing Epoch {:03d} ".format(epoch) + 'train loss {:.4f}'.format(total_loss) + " costs " + time.strftime(
                         "%H: %M: %S", time.gmtime(time.time()-start_time)))
     print('---'*18)
 
