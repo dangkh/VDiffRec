@@ -209,10 +209,7 @@ def evaluate(data_loader, data_te, mask_his, topN):
             batch = batch.to(device)
             maskedBatch = maskedBatch.to(device)
             remaindItem = remaindItem.to(device)
-            # mask map
-            his_data = mask_his[e_idxlist[batch_idx*args.batch_size:batch_idx*args.batch_size+len(batch)]]
 
-            batch_encode, mu, logvar = Autoencoder.get_encode(batch)
             batch_Mask_encode, mu_Mask, logvar_Mask = Autoencoder.get_encode(maskedBatch, False)
             
             batch_latent_recon = diffusion.p_sample(model, batch_encode, args.steps, args.sampling_noise, torch.zeros_like(batch_encode))
