@@ -60,7 +60,7 @@ parser.add_argument('--maxItem', type=int, default=1000, help='diffusion steps')
 
 # params for the Autoencoder
 parser.add_argument('--n_cate', type=int, default=1, help='category num of items')
-parser.add_argument('--in_dims', type=str, default='[300, 1000]', help='the dims for the encoder')
+parser.add_argument('--in_dims', type=str, default='[300]', help='the dims for the encoder')
 parser.add_argument('--out_dims', type=str, default='[]', help='the hidden dims for the decoder')
 parser.add_argument('--act_func', type=str, default='tanh', help='activation function for autoencoder')
 parser.add_argument('--lamda', type=float, default=0.05, help='hyper-parameter of multinomial log-likelihood for AE: 0.01, 0.02, 0.03, 0.05')
@@ -124,7 +124,6 @@ assert len(item_emb) == n_item
 out_dims = eval(args.out_dims)
 in_dims = eval(args.in_dims)
 in_dims.append(n_item)
-
 Autoencoder = AE(in_dims).to(device)
 
 ### Build Gaussian Diffusion ###
@@ -198,7 +197,7 @@ def evaluate(data_loader, data_te, mask_his, topN):
                 LL = dpos[itemBatch]
                 mPos1 = LL[random.randint(0,lenLL)]
                 # mPos2 = LL[random.randint(0,lenLL)]
-                batchMask[itemBatch][int(mPos1.item())] = 0
+                # batchMask[itemBatch][int(mPos1.item())] = 0
                 # batchMask[itemBatch][int(mPos2.item())] = 0
 
             maskedItem = np.ones_like(batchMask) - batchMask
@@ -213,10 +212,10 @@ def evaluate(data_loader, data_te, mask_his, topN):
             # mask map
             his_data = mask_his[e_idxlist[batch_idx*args.batch_size:batch_idx*args.batch_size+len(embed)]]
 
-            batch_encode, mu, logvar = Autoencoder.get_encode(batch)
+            batch_encode, mu, logvar = Autoencoder.get_encode(batch, False)
             batch_Mask_encode, mu_Mask, logvar_Mask = Autoencoder.get_encode(maskedBatch, False)
 
-            batch_latent_recon = diffusion.p_sample(model, batch_encode, args.steps, args.sampling_noise, batch_Mask_encode)
+            batch_latent_recon = diffusion.p_sample(model, batch_encode, args.steps, args.sampling_noise, torch.zeros_like(batch_encode))
             prediction = Autoencoder.decode(batch_latent_recon)
             prediction[his_data.nonzero()] = -np.inf  # mask ui pairs in train & validation set
 
@@ -224,7 +223,7 @@ def evaluate(data_loader, data_te, mask_his, topN):
 
             indices = indices.cpu().numpy().tolist()
             predict_items.extend(indices)
-            
+
     test_results = evaluate_utils.computeTopNAccuracy(target_items, predict_items, topN)
     return test_results
 
@@ -246,7 +245,7 @@ print("args:", args, file = sourceFile)
 print('*'*10, 'End' ,'*'*10, file = sourceFile)
 sourceFile.close()
 for epoch in range(1, args.epochs + 1):
-    if epoch - best_epoch >= 20:
+    if epoch - best_epoch >= 200:
         print('-'*18)
         print('Exiting from training early')
         break
@@ -264,6 +263,7 @@ for epoch in range(1, args.epochs + 1):
         for itemBatch in range(len(batchMask)):
             lenLL = lpos[itemBatch]
             LL = dpos[itemBatch]
+            if np.random.randint(1,10) % 3 == 0: continue
             mPos1 = LL[random.randint(0,lenLL)]
             # mPos2 = LL[random.randint(0,lenLL)]
             batchMask[itemBatch][int(mPos1.item())] = 0
@@ -282,7 +282,7 @@ for epoch in range(1, args.epochs + 1):
         optimizer1.zero_grad()
         optimizer2.zero_grad()
         
-        batch_encode, mu, logvar = Autoencoder.get_encode(remaindItem)
+        batch_encode, mu, logvar = Autoencoder.get_encode(remaindItem, False)
 
         batch_Mask_encode, mu_Mask, logvar_Mask = Autoencoder.get_encode(maskedBatch, False)
 
