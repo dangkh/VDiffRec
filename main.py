@@ -210,17 +210,21 @@ def evaluate(data_loader, data_te, mask_his, topN):
             maskedBatch = maskedBatch.to(device)
             remaindItem = remaindItem.to(device)
 
-            batch_Mask_encode, mu_Mask, logvar_Mask = Autoencoder.get_encode(maskedBatch, False)
-            
-            batch_latent_recon = diffusion.p_sample(model, batch_encode, args.steps, args.sampling_noise, torch.zeros_like(batch_encode))
-            prediction = Autoencoder.decode(batch_latent_recon)  # [batch_size, n1_items + n2_items + n3_items]
+            # mask map
+            his_data = mask_his[e_idxlist[batch_idx*args.batch_size:batch_idx*args.batch_size+len(embed)]]
 
+            batch_encode, mu, logvar = Autoencoder.get_encode(batch)
+            batch_Mask_encode, mu_Mask, logvar_Mask = Autoencoder.get_encode(maskedBatch, False)
+
+            batch_latent_recon = diffusion.p_sample(model, batch_encode, args.steps, args.sampling_noise, batch_Mask_encode)
+            prediction = Autoencoder.decode(batch_latent_recon)
             prediction[his_data.nonzero()] = -np.inf  # mask ui pairs in train & validation set
 
             _, indices = torch.topk(prediction, topN[-1])  # topk category idx
 
             indices = indices.cpu().numpy().tolist()
             predict_items.extend(indices)
+            
     test_results = evaluate_utils.computeTopNAccuracy(target_items, predict_items, topN)
     return test_results
 
