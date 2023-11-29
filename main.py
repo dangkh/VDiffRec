@@ -25,8 +25,12 @@ from models.DNN import DNN
 import evaluate_utils
 import data_utils
 from copy import deepcopy
-
+from setTransformer_module import *
+from setTransformer_model import *
+from mixture_of_mvns import MixtureOfMVNs
+from mvn_diag import MultivariateNormalDiag
 import random
+
 random_seed = 1001
 torch.manual_seed(random_seed) # cpu
 torch.cuda.manual_seed(random_seed) #gpu
@@ -125,7 +129,8 @@ assert len(item_emb) == n_item
 out_dims = eval(args.out_dims)
 in_dims = eval(args.in_dims)[::-1]
 Autoencoder = AE(item_emb, args.n_cate, in_dims, out_dims, device, args.act_func, args.maxItem, args.reparam).to(device)
-
+inDim = item_emb.shape[-1]
+setT = SetTransformer(inDim, 1, 16).to(device)
 ### Build Gaussian Diffusion ###
 if args.mean_type == 'x0':
     mean_type = gd.ModelMeanType.START_X
@@ -173,6 +178,8 @@ elif args.optimizer2 == 'SGD':
     optimizer2 = optim.SGD(model.parameters(), lr=args.lr2, weight_decay=args.wd2)
 elif args.optimizer2 == 'Momentum':
     optimizer2 = optim.SGD(model.parameters(), lr=args.lr2, momentum=0.95, weight_decay=args.wd2)
+
+optimizer3 = optim.AdamW(setT.parameters(), lr=args.lr1)
 print("models ready.")
 
 
@@ -245,8 +252,12 @@ for epoch in range(1, args.epochs + 1):
         label = label.to(device)
         batch_count += 1
         optimizer1.zero_grad()
-        optimizer2.zero_grad()
-        _, batch_latent, _ = Autoencoder.Encode(embed)
+        optimizer3.zero_grad()
+        # _, batch_latent, _ = Autoencoder.Encode(embed)
+        print(embed.shape)
+        x = setT(embed)
+        print(x.shape)
+        stop
         terms = diffusion.training_losses(model, batch_latent, args.reweight)
         elbo = terms["loss"].mean()  # loss from diffusion
         # batch_latent_recon = terms["z_latent"] 
