@@ -25,7 +25,8 @@ from models.DNN import DNN
 import evaluate_utils
 import data_utils
 from copy import deepcopy
-
+from setTransformer_module import *
+from setTransformer_model import *
 import random
 random_seed = 1001
 torch.manual_seed(random_seed) # cpu
@@ -60,7 +61,7 @@ parser.add_argument('--maxItem', type=int, default=1000, help='diffusion steps')
 
 # params for the Autoencoder
 parser.add_argument('--n_cate', type=int, default=1, help='category num of items')
-parser.add_argument('--in_dims', type=str, default='[300]', help='the dims for the encoder')
+parser.add_argument('--in_dims', type=str, default='[64]', help='the dims for the encoder')
 parser.add_argument('--out_dims', type=str, default='[]', help='the hidden dims for the decoder')
 parser.add_argument('--act_func', type=str, default='tanh', help='activation function for autoencoder')
 parser.add_argument('--lamda', type=float, default=0.05, help='hyper-parameter of multinomial log-likelihood for AE: 0.01, 0.02, 0.03, 0.05')
@@ -73,7 +74,7 @@ parser.add_argument('--reparam', type=bool, default=True, help="Autoencoder with
 
 # params for the MLP
 parser.add_argument('--time_type', type=str, default='cat', help='cat or add')
-parser.add_argument('--mlp_dims', type=str, default='[300]', help='the dims for the DNN')
+parser.add_argument('--mlp_dims', type=str, default='[64]', help='the dims for the DNN')
 parser.add_argument('--norm', type=bool, default=False, help='Normalize the input or not')
 parser.add_argument('--emb_size', type=int, default=10, help='timestep embedding size')
 parser.add_argument('--mlp_act_func', type=str, default='tanh', help='the activation function for MLP')
@@ -125,6 +126,8 @@ assert len(item_emb) == n_item
 out_dims = eval(args.out_dims)
 in_dims = eval(args.in_dims)[::-1]
 Autoencoder = AE(item_emb, args.n_cate, in_dims, out_dims, device, args.act_func, args.maxItem, args.reparam).to(device)
+inDim = item_emb.shape[-1]
+setT = SetTransformer(inDim, 1, 64, num_items = n_item).to(device)
 
 ### Build Gaussian Diffusion ###
 if args.mean_type == 'x0':
@@ -173,12 +176,15 @@ elif args.optimizer2 == 'SGD':
     optimizer2 = optim.SGD(model.parameters(), lr=args.lr2, weight_decay=args.wd2)
 elif args.optimizer2 == 'Momentum':
     optimizer2 = optim.SGD(model.parameters(), lr=args.lr2, momentum=0.95, weight_decay=args.wd2)
+
+optimizer3 = optim.AdamW(setT.parameters(), lr=args.lr1)
 print("models ready.")
 
 
 def evaluate(data_loader, data_te, mask_his, topN):
     model.eval()
     Autoencoder.eval()
+    setT.eval()
     e_idxlist = list(range(mask_his.shape[0]))
     e_N = mask_his.shape[0]
 
@@ -195,10 +201,12 @@ def evaluate(data_loader, data_te, mask_his, topN):
             # mask map
             his_data = mask_his[e_idxlist[batch_idx*args.batch_size:batch_idx*args.batch_size+len(embed)]]
 
-            _, batch_latent, _ = Autoencoder.Encode(embed)
+            # _, batch_latent, _ = Autoencoder.Encode(embed)
+            batch_latent = setT(embed)
+            batch_latent = batch_latent[:,0,:]
             batch_latent_recon = diffusion.p_sample(model, batch_latent, args.steps, args.sampling_noise)
-            prediction = Autoencoder.Decode(batch_latent_recon)  # [batch_size, n1_items + n2_items + n3_items]
-
+            # prediction = Autoencoder.Decode(batch_latent_recon)  # [batch_size, n1_items + n2_items + n3_items]
+            prediction = setT.predict(batch_latent_recon)
             prediction[his_data.nonzero()] = -np.inf  # mask ui pairs in train & validation set
 
             _, indices = torch.topk(prediction, topN[-1])  # topk category idx
@@ -245,15 +253,19 @@ for epoch in range(1, args.epochs + 1):
         label = label.to(device)
         batch_count += 1
         optimizer1.zero_grad()
-        optimizer2.zero_grad()
-        _, batch_latent, _ = Autoencoder.Encode(embed)
+        # optimizer2.zero_grad()
+        optimizer3.zero_grad()
+        # _, batch_latent, _ = Autoencoder.Encode(embed)
+        batch_latent = setT(embed)
+        batch_latent = batch_latent[:,0,:]
+
         terms = diffusion.training_losses(model, batch_latent, args.reweight)
         elbo = terms["loss"].mean()  # loss from diffusion
         # batch_latent_recon = terms["z_latent"] 
         batch_latent_recon = 0.5 * (terms["z_latent"] + terms["pred_xstart"])
         # terms["z_latent"]
-        batch_recon = Autoencoder.Decode(batch_latent_recon)
-
+        # batch_recon = Autoencoder.Decode(batch_latent_recon)
+        batch_recon = setT.predict(batch_latent_recon)
         if args.anneal_steps > 0:
             lamda = max((1. - update_count / args.anneal_steps) * args.lamda, args.anneal_cap)
         else:
@@ -265,7 +277,8 @@ for epoch in range(1, args.epochs + 1):
             anneal = args.vae_anneal_cap
 
         # vae_loss = compute_loss(batch_recon, batch) # + anneal * vae_kl  # loss from autoencoder
-        vae_loss = crossELoss(batch_recon, label)
+        # vae_loss = crossELoss(batch_recon, label)
+        vae_loss = -torch.mean(torch.sum(F.log_softmax(batch_recon, 1) * batch, -1))
 
         if args.reweight:
             loss = lamda * elbo + vae_loss
@@ -275,7 +288,8 @@ for epoch in range(1, args.epochs + 1):
         total_loss += loss 
         loss.backward()
         optimizer1.step()
-        optimizer2.step()
+        # optimizer2.step()
+        optimizer3.step()
 
     update_count += 1
     

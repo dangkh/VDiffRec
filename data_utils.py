@@ -148,7 +148,7 @@ class DataDiffusion(Dataset):
         self.label = sfm(data)
         for ii in range(len(self.data)):
             self.userEmb.append(self.index2itemEm(data[ii]))
-        self.userEmb = torch.vstack(self.userEmb)
+        self.userEmb = torch.stack(self.userEmb, dim=0)
 
     def index2itemEm(self, itemIndx):
         output = []
@@ -157,14 +157,14 @@ class DataDiffusion(Dataset):
         clickedItem = clickedItem[index]
         counter = 0
         for ii in clickedItem:
-            output.append(self.embed[ii.item()])
+            output.append(torch.reshape(self.embed[ii.item()], (1,-1)))
             counter += 1
             if counter > (self.maxItem-1):
                 break
         compensationNum = self.maxItem -counter
-        compensationFeat = torch.zeros(compensationNum*64)
+        compensationFeat = torch.zeros((compensationNum,64))
         output.append(compensationFeat)
-        return torch.cat(output)
+        return torch.vstack(output)
 
     def __getitem__(self, index):
         item = self.data[index]
