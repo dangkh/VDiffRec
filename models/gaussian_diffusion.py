@@ -210,8 +210,6 @@ class GaussianDiffusion(nn.Module):
         if noise is None:
             noise = th.randn_like(x_start)
         assert noise.shape == x_start.shape
-        print(noise.shape)
-        stop
         return (
             self._extract_into_tensor(self.sqrt_alphas_cumprod, t, x_start.shape) * x_start
             + self._extract_into_tensor(self.sqrt_one_minus_alphas_cumprod, t, x_start.shape)
