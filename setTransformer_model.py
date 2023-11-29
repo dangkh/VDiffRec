@@ -1,7 +1,7 @@
 from setTransformer_module import *
 
 class DeepSet(nn.Module):
-    def __init__(self, dim_input, num_outputs, dim_output, dim_hidden=128):
+    def __init__(self, dim_input, num_outputs, dim_output, dim_hidden=128, num_items = 1000):
         super(DeepSet, self).__init__()
         self.num_outputs = num_outputs
         self.dim_output = dim_output
@@ -21,15 +21,20 @@ class DeepSet(nn.Module):
                 nn.Linear(dim_hidden, dim_hidden),
                 nn.ReLU(),
                 nn.Linear(dim_hidden, num_outputs*dim_output))
+        self.predictItem = nn.Linear(dim_output, num_items)
+        self.activateF = nn.Sigmoid()
 
     def forward(self, X):
         X = self.enc(X).mean(-2)
         X = self.dec(X).reshape(-1, self.num_outputs, self.dim_output)
         return X
 
+    def predict(self, X):
+        return self.activateF(self.predictItem(X))
+
 class SetTransformer(nn.Module):
     def __init__(self, dim_input, num_outputs, dim_output,
-            num_inds=32, dim_hidden=128, num_heads=4, ln=False):
+            num_inds=32, dim_hidden=128, num_heads=4, num_items = 1000, ln=False):
         super(SetTransformer, self).__init__()
         self.enc = nn.Sequential(
                 ISAB(dim_input, dim_hidden, num_heads, num_inds, ln=ln),
@@ -39,6 +44,11 @@ class SetTransformer(nn.Module):
                 SAB(dim_hidden, dim_hidden, num_heads, ln=ln),
                 SAB(dim_hidden, dim_hidden, num_heads, ln=ln),
                 nn.Linear(dim_hidden, dim_output))
+        self.predictItem = nn.Linear(dim_output, num_items)
+        self.activateF = nn.Sigmoid()
 
     def forward(self, X):
         return self.dec(self.enc(X))
+
+    def predict(self, X):
+        return self.activateF(self.predictItem(X))
