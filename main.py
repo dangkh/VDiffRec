@@ -203,7 +203,7 @@ def evaluate(data_loader, data_te, mask_his, topN):
 
             # _, batch_latent, _ = Autoencoder.Encode(embed)
             batch_latent = setT(embed)
-            batch_latent = batch_latent[:,0,:]
+            batch_latent = batch_latent.reshape(len(batch_latent),-1)
             batch_latent_recon = diffusion.p_sample(model, batch_latent, args.steps, args.sampling_noise)
             # prediction = Autoencoder.Decode(batch_latent_recon)  # [batch_size, n1_items + n2_items + n3_items]
             prediction = setT.predict(batch_latent_recon)
@@ -226,7 +226,7 @@ mask_train = train_data
 
 
 crossELoss = torch.nn.CrossEntropyLoss()
-# mseLoss = torch.nn.MSELoss()
+mseLoss = torch.nn.MSELoss()
 listSFBatch = []
 sourceFile = open('res.txt', 'a')
 print("Start training...", file = sourceFile)
@@ -241,6 +241,7 @@ for epoch in range(1, args.epochs + 1):
 
     Autoencoder.train()
     model.train()
+    setT.train()
 
     start_time = time.time()
 
@@ -257,7 +258,7 @@ for epoch in range(1, args.epochs + 1):
         optimizer3.zero_grad()
         # _, batch_latent, _ = Autoencoder.Encode(embed)
         batch_latent = setT(embed)
-        batch_latent = batch_latent[:,0,:]
+        batch_latent = batch_latent.reshape(len(batch_latent),-1)
 
         terms = diffusion.training_losses(model, batch_latent, args.reweight)
         elbo = terms["loss"].mean()  # loss from diffusion
@@ -277,8 +278,8 @@ for epoch in range(1, args.epochs + 1):
             anneal = args.vae_anneal_cap
 
         # vae_loss = compute_loss(batch_recon, batch) # + anneal * vae_kl  # loss from autoencoder
-        # vae_loss = crossELoss(batch_recon, label)
-        vae_loss = -torch.mean(torch.sum(F.log_softmax(batch_recon, 1) * batch, -1))
+        vae_loss = mseLoss(batch_recon, batch)
+        # vae_loss = -torch.mean(torch.sum(F.log_softmax(batch_recon, 1) * batch, -1))
 
         if args.reweight:
             loss = lamda * elbo + vae_loss
@@ -293,7 +294,7 @@ for epoch in range(1, args.epochs + 1):
 
     update_count += 1
     
-    if epoch % 5 == 0:
+    if epoch % 2 == 0:
         # sourceFile = open('res.txt', 'a')
         # print(f"epoch: {epoch}", file = sourceFile)
         valid_results = evaluate(test_loader, valid_y_data, mask_train, eval(args.topN))
