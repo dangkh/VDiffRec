@@ -25,17 +25,24 @@ class AutoEncoder(nn.Module):
         self.reparam = reparam
         self.dropout = nn.Dropout(dropout)
         # self.U = nn.Embedding(self.maxItem * 64, 64, max_norm=True)
-        self.reduceDim = nn.Linear(self.maxItem * 64, self.in_dims[0])
+        self.reduceDim = nn.Linear( 64, self.in_dims[0])
+        self.f1 = nn.Linear( self.in_dims[0], self.in_dims[0])
         # self.decodeDim = nn.Linear(self.in_dims[0], self.maxItem * 64)
         self.predictItem = nn.Linear(self.in_dims[0], self.n_item)
         self.activateF = nn.Sigmoid()
         self.loss = torch.nn.MSELoss()
+        self.Tanh = nn.ReLU()
         self.apply(xavier_normal_initialization)
     
 
     def Encode(self, batch):
-        batch = self.reduceDim(batch)
         batch = self.dropout(batch)
+        batch = self.reduceDim(batch)
+        batch = self.Tanh(batch)
+        batch = self.dropout(batch)
+        batch = self.f1(batch)
+        # batch = self.Tanh(batch)
+        # batch = self.dropout(batch)
         # batch = self.U(batch)
 
         return '', batch, ''

@@ -7,26 +7,33 @@ class DeepSet(nn.Module):
         self.dim_output = dim_output
         self.enc = nn.Sequential(
                 nn.Linear(dim_input, dim_hidden),
-                nn.ReLU(),
-                nn.Linear(dim_hidden, dim_hidden),
-                nn.ReLU(),
-                nn.Linear(dim_hidden, dim_hidden),
-                nn.ReLU(),
+                # nn.Tanh(),
                 nn.Linear(dim_hidden, dim_hidden))
         self.dec = nn.Sequential(
                 nn.Linear(dim_hidden, dim_hidden),
-                nn.ReLU(),
-                nn.Linear(dim_hidden, dim_hidden),
-                nn.ReLU(),
-                nn.Linear(dim_hidden, dim_hidden),
-                nn.ReLU(),
+                # nn.Tanh(),
                 nn.Linear(dim_hidden, num_outputs*dim_output))
+        self.f1 = nn.Linear(dim_hidden, dim_hidden)
+        self.f2 = nn.Linear(dim_hidden, dim_output)
+        # self.f2 = nn.Linear(dim_hidden, num_outputs*dim_output)
+        
+        self.dropout = nn.Dropout(0.1)
+        self.ff = nn.Linear(128, 128)
+
         self.predictItem = nn.Linear(dim_output, num_items)
-        self.activateF = nn.Sigmoid()
+        self.activateF = nn.Tanh()
 
     def forward(self, X):
+        # print(X.shape)
+        # print(X.mean(-2).shape)
+        # stop
+        # X = X.mean(-2)
         X = self.enc(X).mean(-2)
-        X = self.dec(X).reshape(-1, self.num_outputs, self.dim_output)
+        X = self.dropout(X)
+        X = self.ff(X)
+        X = self.f1(X)
+        X = self.f2(X)
+        # X = self.dec(X)
         return X
 
     def predict(self, X):
@@ -48,7 +55,13 @@ class SetTransformer(nn.Module):
         self.activateF = nn.Sigmoid()
 
     def forward(self, X):
-        return self.dec(self.enc(X))
+        # print(X[0], X[0].shape)
+        enc = self.enc(X)
+        # print(enc[0], enc[0].shape)
+        dec = self.dec(enc)
+        # print(dec[0], dec[0].shape)
+        return dec
 
     def predict(self, X):
+        # print(X[0], X[0].shape)
         return self.activateF(self.predictItem(X))
