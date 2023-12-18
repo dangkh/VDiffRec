@@ -49,7 +49,7 @@ parser.add_argument('--lr2', type=float, default=0.0001, help='learning rate for
 parser.add_argument('--wd1', type=float, default=1e-5, help='weight decay for Autoencoder')
 parser.add_argument('--wd2', type=float, default=0, help='weight decay for MLP')
 parser.add_argument('--batch_size', type=int, default=400)
-parser.add_argument('--epochs', type=int, default=2000, help='upper epoch limit')
+parser.add_argument('--epochs', type=int, default=1000, help='upper epoch limit')
 parser.add_argument('--topN', type=str, default='[10, 20, 50, 100]')
 parser.add_argument('--tst_w_val', action='store_true', help='test with validation')
 parser.add_argument('--cuda', action='store_true', help='use CUDA')
@@ -165,24 +165,24 @@ elif args.optimizer1 == 'SGD':
 elif args.optimizer1 == 'Momentum':
     optimizer1 = optim.SGD(Autoencoder.parameters(), lr=args.lr1, momentum=0.95, weight_decay=args.wd1)
 
-# if args.optimizer2 == 'Adagrad':
-#     optimizer2 = optim.Adagrad(
-#         model.parameters(), lr=args.lr2, initial_accumulator_value=1e-8, weight_decay=args.wd2)
-# elif args.optimizer2 == 'Adam':
-#     optimizer2 = optim.Adam(model.parameters(), lr=args.lr2, weight_decay=args.wd2)
-# elif args.optimizer2 == 'AdamW':
-#     optimizer2 = optim.AdamW(model.parameters(), lr=args.lr2, weight_decay=args.wd2)
-# elif args.optimizer2 == 'SGD':
-#     optimizer2 = optim.SGD(model.parameters(), lr=args.lr2, weight_decay=args.wd2)
-# elif args.optimizer2 == 'Momentum':
-#     optimizer2 = optim.SGD(model.parameters(), lr=args.lr2, momentum=0.95, weight_decay=args.wd2)
+if args.optimizer2 == 'Adagrad':
+    optimizer2 = optim.Adagrad(
+        model.parameters(), lr=args.lr2, initial_accumulator_value=1e-8, weight_decay=args.wd2)
+elif args.optimizer2 == 'Adam':
+    optimizer2 = optim.Adam(model.parameters(), lr=args.lr2, weight_decay=args.wd2)
+elif args.optimizer2 == 'AdamW':
+    optimizer2 = optim.AdamW(model.parameters(), lr=args.lr2, weight_decay=args.wd2)
+elif args.optimizer2 == 'SGD':
+    optimizer2 = optim.SGD(model.parameters(), lr=args.lr2, weight_decay=args.wd2)
+elif args.optimizer2 == 'Momentum':
+    optimizer2 = optim.SGD(model.parameters(), lr=args.lr2, momentum=0.95, weight_decay=args.wd2)
 
 # optimizer3 = optim.AdamW(setT.parameters(), lr=args.lr1)
 print("models ready.")
 
 
 def evaluate(data_loader, data_te, mask_his, topN):
-    # model.eval()
+    model.eval()
     Autoencoder.eval()
     # setT.eval()
     e_idxlist = list(range(mask_his.shape[0]))
@@ -204,8 +204,8 @@ def evaluate(data_loader, data_te, mask_his, topN):
             _, batch_latent, _ = Autoencoder.Encode(embed)
             # batch_latent = setT(embed)
             # batch_latent = batch_latent.reshape(len(batch_latent),-1)
-            # batch_latent_recon = diffusion.p_sample(model, batch_latent, args.steps, args.sampling_noise)
-            prediction = Autoencoder.Decode(batch_latent)  # [batch_size, n1_items + n2_items + n3_items]
+            batch_latent_recon = diffusion.p_sample(model, batch_latent, args.steps, args.sampling_noise)
+            prediction = Autoencoder.Decode(batch_latent_recon)  # [batch_size, n1_items + n2_items + n3_items]
             # prediction = setT.predict(batch_latent)
             prediction[his_data.nonzero()] = -np.inf  # mask ui pairs in train & validation set
 
@@ -240,7 +240,7 @@ for epoch in range(1, args.epochs + 1):
     #     break
 
     Autoencoder.train()
-    # model.train()
+    model.train()
     # setT.train()
 
     start_time = time.time()
@@ -254,23 +254,23 @@ for epoch in range(1, args.epochs + 1):
         label = label.to(device)
         batch_count += 1
         optimizer1.zero_grad()
-        # optimizer2.zero_grad()
+        optimizer2.zero_grad()
         # optimizer3.zero_grad()
         _, batch_latent, _ = Autoencoder.Encode(embed)
         # batch_latent = setT(embed)
         # batch_latent = batch_latent.reshape(len(batch_latent),-1)
 
-        # terms = diffusion.training_losses(model, batch_latent, args.reweight)
-        # elbo = terms["loss"].mean()  # loss from diffusion
-        # # batch_latent_recon = terms["z_latent"] 
+        terms = diffusion.training_losses(model, batch_latent, args.reweight)
+        elbo = terms["loss"].mean()  # loss from diffusion
+        batch_latent_recon = terms["pred_xstart"] 
         # batch_latent_recon = 0.5 * (terms["z_latent"] + terms["pred_xstart"])
         # terms["z_latent"]
-        batch_recon = Autoencoder.Decode(batch_latent)
+        batch_recon = Autoencoder.Decode(batch_latent_recon)
         # batch_recon = setT.predict(batch_latent)
-        # if args.anneal_steps > 0:
-        #     lamda = max((1. - update_count / args.anneal_steps) * args.lamda, args.anneal_cap)
-        # else:
-        #     lamda = max(args.lamda, args.anneal_cap)
+        if args.anneal_steps > 0:
+            lamda = max((1. - update_count / args.anneal_steps) * args.lamda, args.anneal_cap)
+        else:
+            lamda = max(args.lamda, args.anneal_cap)
         
         # if args.vae_anneal_steps > 0:
         #     anneal = min(args.vae_anneal_cap, 1. * update_count_vae / args.vae_anneal_steps)
@@ -278,19 +278,18 @@ for epoch in range(1, args.epochs + 1):
         #     anneal = args.vae_anneal_cap
 
         # vae_loss = compute_loss(batch_recon, batch) # + anneal * vae_kl  # loss from autoencoder
-        loss = mseLoss(batch_recon, batch)
-        elbo = loss
+        vae_loss = mseLoss(batch_recon, batch) 
         # vae_loss = -torch.mean(torch.sum(F.log_softmax(batch_recon, 1) * batch, -1))
 
-        # if args.reweight:
-        #     loss = lamda * elbo + vae_loss
-        # else:
-        #     loss = elbo + lamda * vae_loss
+        if args.reweight:
+            loss = lamda * elbo + vae_loss
+        else:
+            loss = elbo + lamda * vae_loss
         update_count_vae += 1
         total_loss += loss 
         loss.backward()
         optimizer1.step()
-        # optimizer2.step()
+        optimizer2.step()
         # optimizer3.step()
 
     update_count += 1
