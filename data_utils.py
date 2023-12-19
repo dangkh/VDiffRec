@@ -146,25 +146,27 @@ class DataDiffusion(Dataset):
         self.userEmbMean = []
         self.user_numInteract = []
         self.userEmbSum = []
+        self.userClickIdx = []
         self.maxItem = maxItem
         sfm = torch.nn.Softmax(dim = 1)
         self.label = sfm(data)
         for ii in range(len(self.data)):
-            fulEm, emb1, numI, sumEmb = self.index2itemEm(data[ii])
+            fulEm, emb1, numI, sumEmb, clickedItem = self.index2itemEm(data[ii])
             self.user_numInteract.append(numI)
             self.userEmb.append(fulEm)
             self.userEmbMean.append(emb1)
             self.userEmbSum.append(sumEmb)
-        self.cumNumInteract = [0]
-        for ii in range(len(self.user_numInteract)):
-            self.cumNumInteract.append(self.cumNumInteract[-1] + self.user_numInteract[ii])
-        self.userEmb = torch.vstack(self.userEmb)
+            self.userClickIdx.append(clickedItem)
+        # self.cumNumInteract = [0]
+        # for ii in range(len(self.user_numInteract)):
+        #     self.cumNumInteract.append(self.cumNumInteract[-1] + self.user_numInteract[ii])
+        # self.userEmb = torch.vstack(self.userEmb)
 
     def index2itemEm(self, itemIndx):
         output = []
         clickedItem = torch.where(itemIndx == 1)[0]
-        index = torch.randperm(len(clickedItem))
-        clickedItem = clickedItem[index]
+        # index = torch.randperm(len(clickedItem))
+        # clickedItem = clickedItem[index]
         counter = 0
         for ii in clickedItem:
             output.append(torch.reshape(self.embed[ii.item()], (1,-1)))
@@ -176,15 +178,18 @@ class DataDiffusion(Dataset):
         # compensationNum = self.maxItem -counter
         # compensationFeat = torch.zeros((compensationNum,64))
         # output.append(compensationFeat)
-        return torch.vstack(output), emb_wo_comp, len(clickedItem), sumEmb
+        return torch.vstack(output), emb_wo_comp, len(clickedItem), sumEmb, clickedItem
 
     def __getitem__(self, index):
         # l, r = self.cumNumInteract[index], self.cumNumInteract[index+1]
         numI = self.user_numInteract[index]
         maskIdx = np.random.randint(0, numI)
-        maskEmb = self.userEmb[maskIdx]
-        embed = (self.userEmbSum[index] - maskEmb) / (numI-1)
+        itemIdx = self.userClickIdx[index][maskIdx]
+        maskEmb = self.userEmb[index][maskIdx]
+        # embed = (self.userEmbSum[index] - maskEmb) / (numI-1)
+        embed = self.userEmbMean[index]
         item = self.data[index]
+        # item[itemIdx] = 0
         label = self.label[index]
         return item, [embed, maskEmb], label
 

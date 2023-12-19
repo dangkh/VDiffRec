@@ -32,6 +32,7 @@ class DNN(nn.Module):
             for d_in, d_out in zip(out_dims_temp[:-1], out_dims_temp[1:])])
         
         self.drop = nn.Dropout(dropout)
+        self.guidanceEmb = nn.Linear(self.in_dims[0], self.in_dims[0])
         self.init_weights()
     
     def init_weights(self):
@@ -67,11 +68,12 @@ class DNN(nn.Module):
     def forward(self, x, timesteps, guidance):
         time_emb = timestep_embedding(timesteps, self.time_emb_dim).to(x.device)
         emb = self.emb_layer(time_emb)
+        # guidance = self.guidanceEmb(guidance)
         if self.norm:
             x = F.normalize(x)
         x = self.drop(x)
         # h = torch.cat([x, emb], dim=-1)
-        h = torch.cat([x+guidance, emb], dim=-1)
+        h = torch.cat([x, emb], dim=-1)
         for i, layer in enumerate(self.in_layers):
             h = layer(h)
             h = torch.tanh(h)
