@@ -195,7 +195,10 @@ def evaluate(data_loader, data_te, mask_his, topN):
     
     
     with torch.no_grad():
-        for batch_idx, (batch, embed, _) in enumerate(data_loader):
+        for batch_idx, (batch, Lembed, _) in enumerate(data_loader):
+            maskEmb, embed = Lembed
+            embed = embed.to(device)
+            maskEmb = maskEmb.to(device)
             embed = embed.to(device)
             batch = batch.to(device)
             # mask map
@@ -204,7 +207,7 @@ def evaluate(data_loader, data_te, mask_his, topN):
             _, batch_latent, _ = Autoencoder.Encode(embed)
             # batch_latent = setT(embed)
             # batch_latent = batch_latent.reshape(len(batch_latent),-1)
-            batch_latent_recon = diffusion.p_sample(model, batch_latent, args.steps, args.sampling_noise)
+            batch_latent_recon = diffusion.p_sample(model, batch_latent, args.steps, args.sampling_noise, guidance = maskEmb)
             prediction = Autoencoder.Decode(batch_latent_recon)  # [batch_size, n1_items + n2_items + n3_items]
             # prediction = setT.predict(batch_latent)
             prediction[his_data.nonzero()] = -np.inf  # mask ui pairs in train & validation set
@@ -248,8 +251,10 @@ for epoch in range(1, args.epochs + 1):
     batch_count = 0
     total_loss = 0.0
     
-    for batch_idx, (batch, embed, label) in enumerate(train_loader):
+    for batch_idx, (batch, Lembed, label) in enumerate(train_loader):
+        maskEmb, embed = Lembed
         embed = embed.to(device)
+        maskEmb = maskEmb.to(device)
         batch = batch.to(device)
         label = label.to(device)
         batch_count += 1
@@ -260,9 +265,9 @@ for epoch in range(1, args.epochs + 1):
         # batch_latent = setT(embed)
         # batch_latent = batch_latent.reshape(len(batch_latent),-1)
 
-        terms = diffusion.training_losses(model, batch_latent, args.reweight)
+        terms = diffusion.training_losses(model, batch_latent, args.reweight, guidance = maskEmb)
         elbo = terms["loss"].mean()  # loss from diffusion
-        batch_latent_recon = terms["pred_xstart"] 
+        batch_latent_recon = terms["pred_xstart"]
         # batch_latent_recon = 0.5 * (terms["z_latent"] + terms["pred_xstart"])
         # terms["z_latent"]
         batch_recon = Autoencoder.Decode(batch_latent_recon)

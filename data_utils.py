@@ -145,14 +145,16 @@ class DataDiffusion(Dataset):
         self.userEmb = []
         self.userEmbMean = []
         self.user_numInteract = []
+        self.userEmbSum = []
         self.maxItem = maxItem
         sfm = torch.nn.Softmax(dim = 1)
         self.label = sfm(data)
         for ii in range(len(self.data)):
-            fulEm, emb1 = self.index2itemEm(data[ii])
-            self.user_numInteract.append(len(fulEm))
+            fulEm, emb1, numI, sumEmb = self.index2itemEm(data[ii])
+            self.user_numInteract.append(numI)
             self.userEmb.append(fulEm)
             self.userEmbMean.append(emb1)
+            self.userEmbSum.append(sumEmb)
         self.cumNumInteract = [0]
         for ii in range(len(self.user_numInteract)):
             self.cumNumInteract.append(self.cumNumInteract[-1] + self.user_numInteract[ii])
@@ -170,19 +172,21 @@ class DataDiffusion(Dataset):
             if counter > (self.maxItem-1):
                 break
         emb_wo_comp = torch.vstack(output).mean(0)
-
-        compensationNum = self.maxItem -counter
-        compensationFeat = torch.zeros((compensationNum,64))
-        output.append(compensationFeat)
-        return torch.vstack(output), emb_wo_comp
+        sumEmb = torch.vstack(output).sum(0) 
+        # compensationNum = self.maxItem -counter
+        # compensationFeat = torch.zeros((compensationNum,64))
+        # output.append(compensationFeat)
+        return torch.vstack(output), emb_wo_comp, len(clickedItem), sumEmb
 
     def __getitem__(self, index):
         # l, r = self.cumNumInteract[index], self.cumNumInteract[index+1]
-        embed = self.userEmbMean[index]
+        numI = self.user_numInteract[index]
+        maskIdx = np.random.randint(0, numI)
+        maskEmb = self.userEmb[maskIdx]
+        embed = (self.userEmbSum[index] - maskEmb) / (numI-1)
         item = self.data[index]
-        # embed = self.userEmb[index]
         label = self.label[index]
-        return item, embed, label
+        return item, [embed, maskEmb], label
 
     def __len__(self):
         return len(self.data)

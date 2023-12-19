@@ -64,13 +64,14 @@ class DNN(nn.Module):
         self.emb_layer.weight.data.normal_(0.0, std)
         self.emb_layer.bias.data.normal_(0.0, 0.001)
     
-    def forward(self, x, timesteps):
+    def forward(self, x, timesteps, guidance):
         time_emb = timestep_embedding(timesteps, self.time_emb_dim).to(x.device)
         emb = self.emb_layer(time_emb)
         if self.norm:
             x = F.normalize(x)
         x = self.drop(x)
-        h = torch.cat([x, emb], dim=-1)
+        # h = torch.cat([x, emb], dim=-1)
+        h = torch.cat([x+guidance, emb], dim=-1)
         for i, layer in enumerate(self.in_layers):
             h = layer(h)
             h = torch.tanh(h)
