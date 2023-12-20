@@ -29,11 +29,7 @@ from setTransformer_module import *
 from setTransformer_model import *
 import random
 random_seed = 1001
-torch.manual_seed(random_seed) # cpu
-torch.cuda.manual_seed(random_seed) #gpu
-np.random.seed(random_seed) #numpy
-random.seed(random_seed) #random and transforms
-torch.backends.cudnn.deterministic=True # cudnn
+
 def worker_init_fn(worker_id):
     np.random.seed(random_seed + worker_id)
 def seed_worker(worker_id):
@@ -50,6 +46,7 @@ parser.add_argument('--wd1', type=float, default=1e-5, help='weight decay for Au
 parser.add_argument('--wd2', type=float, default=0, help='weight decay for MLP')
 parser.add_argument('--batch_size', type=int, default=400)
 parser.add_argument('--epochs', type=int, default=1000, help='upper epoch limit')
+parser.add_argument('--seeds', type=int, default=1000, help='upper epoch limit')
 parser.add_argument('--topN', type=str, default='[10, 20, 50, 100]')
 parser.add_argument('--tst_w_val', action='store_true', help='test with validation')
 parser.add_argument('--cuda', action='store_true', help='use CUDA')
@@ -93,6 +90,12 @@ parser.add_argument('--reweight', type=bool, default=True, help='assign differen
 
 args = parser.parse_args()
 print("args:", args)
+random_seed = args.seeds
+torch.manual_seed(random_seed) # cpu
+torch.cuda.manual_seed(random_seed) #gpu
+np.random.seed(random_seed) #numpy
+random.seed(random_seed) #random and transforms
+torch.backends.cudnn.deterministic=True # cudnn
 
 os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
 device = torch.device("cuda:0" if args.cuda else "cpu")
@@ -196,7 +199,7 @@ def evaluate(data_loader, data_te, mask_his, topN):
     
     with torch.no_grad():
         for batch_idx, (batch, Lembed, _) in enumerate(data_loader):
-            maskEmb, embed = Lembed
+            embed, maskEmb = Lembed
             embed = embed.to(device)
             maskEmb = maskEmb.to(device)
             embed = embed.to(device)
@@ -252,7 +255,7 @@ for epoch in range(1, args.epochs + 1):
     total_loss = 0.0
     
     for batch_idx, (batch, Lembed, label) in enumerate(train_loader):
-        maskEmb, embed = Lembed
+        embed, maskEmb = Lembed
         embed = embed.to(device)
         maskEmb = maskEmb.to(device)
         batch = batch.to(device)
