@@ -188,10 +188,10 @@ class DataDiffusion(Dataset):
         maskEmb = self.userEmb[index][maskIdx]
         # embed = (self.userEmbSum[index] - maskEmb) / (numI-1)
         embed = self.userEmbMean[index]
-        item = self.data[index]
-        # item[itemIdx] = 0
+        item = torch.zeros_like(self.data[index])
+        item[itemIdx] = 1
         label = self.label[index]
-        return item, [embed, maskEmb], label
+        return self.data[index] - item, [embed, maskEmb], label
 
     def __len__(self):
         return len(self.data)
