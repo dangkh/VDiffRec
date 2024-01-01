@@ -21,7 +21,7 @@ class DNN(nn.Module):
         self.emb_layer = nn.Linear(self.time_emb_dim, self.time_emb_dim)
 
         if self.time_type == "cat":
-            in_dims_temp = [self.in_dims[0] * 2 + self.time_emb_dim] + self.in_dims[1:]
+            in_dims_temp = [self.in_dims[0] + self.time_emb_dim] + self.in_dims[1:]
         else:
             raise ValueError("Unimplemented timestep embedding type %s" % self.time_type)
         out_dims_temp = self.out_dims
@@ -68,12 +68,12 @@ class DNN(nn.Module):
     def forward(self, x, timesteps, guidance):
         time_emb = timestep_embedding(timesteps, self.time_emb_dim).to(x.device)
         emb = self.emb_layer(time_emb)
-        guidance = self.guidanceEmb(guidance)
+        # guidance = self.guidanceEmb(guidance)
         if self.norm:
             x = F.normalize(x)
         x = self.drop(x)
         # h = torch.cat([x, emb], dim=-1)
-        h = torch.cat([x, guidance, emb], dim=-1)
+        h = torch.cat([x + guidance, emb], dim=-1)
         for i, layer in enumerate(self.in_layers):
             h = layer(h)
             h = torch.tanh(h)

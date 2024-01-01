@@ -32,10 +32,17 @@ class AutoEncoder(nn.Module):
         self.activateF = nn.Sigmoid()
         self.loss = torch.nn.MSELoss()
         self.Tanh = nn.ReLU()
+        self.multihead_attn = nn.MultiheadAttention(64, 1)
         self.apply(xavier_normal_initialization)
     
 
-    def Encode(self, batch):
+    def Encode(self, batch, label):
+        attn_output, _ = self.multihead_attn(batch, batch, batch)
+        eLabel = label.unsqueeze(-1)
+        attn_output = attn_output * eLabel
+        sumAtt = attn_output.sum(1) 
+        numI = label.sum(1).reshape(-1, 1)
+        batch = sumAtt / numI
         batch = self.dropout(batch)
         batch = self.reduceDim(batch)
         batch = self.Tanh(batch)

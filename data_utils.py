@@ -149,7 +149,6 @@ class DataDiffusion(Dataset):
         self.userClickIdx = []
         self.maxItem = maxItem
         sfm = torch.nn.Softmax(dim = 1)
-        self.label = sfm(data)
         for ii in range(len(self.data)):
             fulEm, emb1, numI, sumEmb, clickedItem = self.index2itemEm(data[ii])
             self.user_numInteract.append(numI)
@@ -175,23 +174,23 @@ class DataDiffusion(Dataset):
                 break
         emb_wo_comp = torch.vstack(output).mean(0)
         sumEmb = torch.vstack(output).sum(0) 
-        # compensationNum = self.maxItem -counter
-        # compensationFeat = torch.zeros((compensationNum,64))
-        # output.append(compensationFeat)
+        compensationNum = self.maxItem -counter
+        compensationFeat = torch.zeros((compensationNum,64))
+        output.append(compensationFeat)
         return torch.vstack(output), emb_wo_comp, len(clickedItem), sumEmb, clickedItem
 
     def __getitem__(self, index):
-        # l, r = self.cumNumInteract[index], self.cumNumInteract[index+1]
         numI = self.user_numInteract[index]
-        maskIdx = np.random.randint(0, numI)
-        itemIdx = self.userClickIdx[index][maskIdx]
-        maskEmb = self.userEmb[index][maskIdx]
-        # embed = (self.userEmbSum[index] - maskEmb) / (numI-1)
-        embed = self.userEmbMean[index]
-        item = torch.zeros_like(self.data[index])
-        item[itemIdx] = 1
-        label = self.label[index]
-        return self.data[index] - item, [embed, maskEmb], label
+        # maskIdx = np.random.randint(0, numI)
+        # itemIdx = self.userClickIdx[index][maskIdx]
+        # maskEmb = self.userEmb[index][maskIdx]
+        # # embed = (self.userEmbSum[index] - maskEmb) / (numI-1)
+        embed = self.userEmb[index]
+        # item = torch.zeros_like(self.data[index])
+        # item[itemIdx] = 1
+        label = torch.zeros(self.maxItem)
+        label[:numI] = 1
+        return self.data[index], [embed, ''], label
 
     def __len__(self):
         return len(self.data)
