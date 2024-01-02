@@ -182,7 +182,7 @@ print("models ready.")
 
 
 def evaluate(data_loader, data_te, mask_his, topN):
-    model.eval()
+    # model.eval()
     Autoencoder.eval()
     # setT.eval()
     e_idxlist = list(range(mask_his.shape[0]))
@@ -204,8 +204,8 @@ def evaluate(data_loader, data_te, mask_his, topN):
             _, batch_latent, _ = Autoencoder.Encode(embed)
             # batch_latent = setT(embed)
             # batch_latent = batch_latent.reshape(len(batch_latent),-1)
-            batch_latent_recon = diffusion.p_sample(model, batch_latent, args.steps, args.sampling_noise)
-            prediction = Autoencoder.Decode(batch_latent_recon)  # [batch_size, n1_items + n2_items + n3_items]
+            # batch_latent_recon = diffusion.p_sample(model, batch_latent, args.steps, args.sampling_noise)
+            prediction = Autoencoder.Decode(batch_latent)  # [batch_size, n1_items + n2_items + n3_items]
             # prediction = setT.predict(batch_latent)
             prediction[his_data.nonzero()] = -np.inf  # mask ui pairs in train & validation set
 
@@ -240,7 +240,7 @@ for epoch in range(1, args.epochs + 1):
     #     break
 
     Autoencoder.train()
-    model.train()
+    # model.train()
     # setT.train()
 
     start_time = time.time()
@@ -254,18 +254,18 @@ for epoch in range(1, args.epochs + 1):
         label = label.to(device)
         batch_count += 1
         optimizer1.zero_grad()
-        optimizer2.zero_grad()
+        # optimizer2.zero_grad()
         # optimizer3.zero_grad()
         _, batch_latent, _ = Autoencoder.Encode(embed)
-        # batch_latent = setT(embed)
-        # batch_latent = batch_latent.reshape(len(batch_latent),-1)
+        # # batch_latent = setT(embed)
+        # # batch_latent = batch_latent.reshape(len(batch_latent),-1)
 
-        terms = diffusion.training_losses(model, batch_latent, args.reweight)
-        elbo = terms["loss"].mean()  # loss from diffusion
-        batch_latent_recon = terms["pred_xstart"] 
-        # batch_latent_recon = 0.5 * (terms["z_latent"] + terms["pred_xstart"])
-        # terms["z_latent"]
-        batch_recon = Autoencoder.Decode(batch_latent_recon)
+        # terms = diffusion.training_losses(model, batch_latent, args.reweight)
+        # elbo = terms["loss"].mean()  # loss from diffusion
+        # batch_latent_recon = terms["pred_xstart"] 
+        # # batch_latent_recon = 0.5 * (terms["z_latent"] + terms["pred_xstart"])
+        # # terms["z_latent"]
+        batch_recon = Autoencoder.Decode(batch_latent)
         # batch_recon = setT.predict(batch_latent)
         if args.anneal_steps > 0:
             lamda = max((1. - update_count / args.anneal_steps) * args.lamda, args.anneal_cap)
@@ -278,18 +278,18 @@ for epoch in range(1, args.epochs + 1):
         #     anneal = args.vae_anneal_cap
 
         # vae_loss = compute_loss(batch_recon, batch) # + anneal * vae_kl  # loss from autoencoder
-        vae_loss = mseLoss(batch_recon, batch) 
+        loss = mseLoss(batch_recon, batch) 
         # vae_loss = -torch.mean(torch.sum(F.log_softmax(batch_recon, 1) * batch, -1))
 
-        if args.reweight:
-            loss = lamda * elbo + vae_loss
-        else:
-            loss = elbo + lamda * vae_loss
+        # if args.reweight:
+        #     loss = lamda * elbo + vae_loss
+        # else:
+        #     loss = elbo + lamda * vae_loss
         update_count_vae += 1
         total_loss += loss 
         loss.backward()
         optimizer1.step()
-        optimizer2.step()
+        # optimizer2.step()
         # optimizer3.step()
 
     update_count += 1
