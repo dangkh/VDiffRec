@@ -177,7 +177,7 @@ elif args.optimizer1 == 'Momentum':
 # elif args.optimizer2 == 'Momentum':
 #     optimizer2 = optim.SGD(model.parameters(), lr=args.lr2, momentum=0.95, weight_decay=args.wd2)
 
-optimizer3 = optim.AdamW(setT.parameters(), lr=args.lr1)
+optimizer3 = optim.AdamW(setT.parameters(), lr=args.lr1, weight_decay=args.wd1)
 print("models ready.")
 
 
@@ -204,7 +204,7 @@ def evaluate(data_loader, data_te, mask_his, topN):
 
             # _, batch_latent, _ = Autoencoder.Encode(embed)
             batch_latent = setT(embed, label)
-            batch_latent = batch_latent.reshape(len(batch_latent),-1)
+            batch_latent = batch_latent.sum(-2)
             # batch_latent_recon = diffusion.p_sample(model, batch_latent, args.steps, args.sampling_noise)
             # prediction = Autoencoder.Decode(batch_latent)  # [batch_size, n1_items + n2_items + n3_items]
             prediction = setT.predict(batch_latent)
@@ -258,8 +258,8 @@ for epoch in range(1, args.epochs + 1):
         # optimizer2.zero_grad()
         optimizer3.zero_grad()
         # _, batch_latent, _ = Autoencoder.Encode(embed)
-        batch_latent = setT(embed, label)
-        batch_latent = batch_latent.reshape(len(batch_latent),-1)
+        batch_latent = setT(embed, label)        
+        batch_latent = batch_latent.sum(-2)
 
         # terms = diffusion.training_losses(model, batch_latent, args.reweight)
         # elbo = terms["loss"].mean()  # loss from diffusion
