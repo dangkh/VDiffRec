@@ -145,18 +145,19 @@ class DataDiffusion(Dataset):
         self.userEmb = []
         self.userEmbMean = []
         self.maxItem = maxItem
-        sfm = torch.nn.Softmax(dim = 1)
-        self.label = sfm(data)
+        self.userNumI = []
         for ii in range(len(self.data)):
-            fulEm, emb1 = self.index2itemEm(data[ii])
+            fulEm, emb1,numI = self.index2itemEm(data[ii])
             self.userEmb.append(fulEm)
             self.userEmbMean.append(emb1)
+            self.userNumI.append(numI)
 
     def index2itemEm(self, itemIndx):
         output = []
         clickedItem = torch.where(itemIndx == 1)[0]
         index = torch.randperm(len(clickedItem))
         clickedItem = clickedItem[index]
+        numI = len(clickedItem)
         counter = 0
         for ii in clickedItem:
             output.append(torch.reshape(self.embed[ii.item()], (1,-1)))
@@ -168,13 +169,15 @@ class DataDiffusion(Dataset):
         compensationNum = self.maxItem -counter
         compensationFeat = torch.zeros((compensationNum,64))
         output.append(compensationFeat)
-        return torch.vstack(output), emb_wo_comp
+        return torch.vstack(output), emb_wo_comp, numI
 
     def __getitem__(self, index):
         # embed = self.userEmbMean[index]
         item = self.data[index]
         embed = self.userEmb[index]
-        label = self.label[index]
+        # label = self.label[index]
+        label = torch.zeros(self.maxItem)
+        label[:self.userNumI[index]] = 1
         return item, embed, label
 
     def __len__(self):
