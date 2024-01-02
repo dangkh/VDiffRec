@@ -5,17 +5,15 @@ class DeepSet(nn.Module):
         super(DeepSet, self).__init__()
         self.num_outputs = num_outputs
         self.dim_output = dim_output
+        self.dropout = nn.Dropout(0.1)
         self.enc = nn.Sequential(
-                nn.Linear(dim_input, dim_hidden),
-                nn.ReLU(),
-                nn.Linear(dim_hidden, dim_hidden))
+                nn.Linear(dim_input, dim_hidden))
         self.dec = nn.Sequential(
-                nn.Linear(dim_hidden, dim_hidden),
                 nn.ReLU(),
                 nn.Linear(dim_hidden, num_outputs*dim_output))
         
         self.predictItem = nn.Linear(dim_output, num_items)
-        self.activateF = nn.ReLU()
+        self.activateF = nn.Sigmoid()
 
     def forward(self, X, label):
         X = self.enc(X)
@@ -25,6 +23,7 @@ class DeepSet(nn.Module):
         numI = label.sum(1).reshape(-1, 1)
         X = X / numI
         X = self.dec(X).reshape(-1, self.num_outputs, self.dim_output)
+        X = self.dropout(X)
         return X
 
     def predict(self, X):
