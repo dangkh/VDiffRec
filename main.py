@@ -60,7 +60,7 @@ parser.add_argument('--maxItem', type=int, default=1000, help='diffusion steps')
 
 # params for the Autoencoder
 parser.add_argument('--n_cate', type=int, default=1, help='category num of items')
-parser.add_argument('--in_dims', type=str, default='[300, 1000]', help='the dims for the encoder')
+parser.add_argument('--in_dims', type=str, default='[100]', help='the dims for the encoder')
 parser.add_argument('--out_dims', type=str, default='[]', help='the hidden dims for the decoder')
 parser.add_argument('--act_func', type=str, default='tanh', help='activation function for autoencoder')
 parser.add_argument('--lamda', type=float, default=0.05, help='hyper-parameter of multinomial log-likelihood for AE: 0.01, 0.02, 0.03, 0.05')
@@ -73,7 +73,7 @@ parser.add_argument('--reparam', type=bool, default=True, help="Autoencoder with
 
 # params for the MLP
 parser.add_argument('--time_type', type=str, default='cat', help='cat or add')
-parser.add_argument('--mlp_dims', type=str, default='[300]', help='the dims for the DNN')
+parser.add_argument('--mlp_dims', type=str, default='[100]', help='the dims for the DNN')
 parser.add_argument('--norm', type=bool, default=False, help='Normalize the input or not')
 parser.add_argument('--emb_size', type=int, default=10, help='timestep embedding size')
 parser.add_argument('--mlp_act_func', type=str, default='tanh', help='the activation function for MLP')
@@ -178,7 +178,7 @@ print("models ready.")
 
 
 def evaluate(data_loader, data_te, mask_his, topN):
-    model.eval()
+    # model.eval()
     Autoencoder.eval()
     e_idxlist = list(range(mask_his.shape[0]))
     e_N = mask_his.shape[0]
@@ -190,11 +190,11 @@ def evaluate(data_loader, data_te, mask_his, topN):
     
     
     with torch.no_grad():
-        for batch_idx, (batch, embed, _) in enumerate(data_loader):
-            embed = embed.to(device)
+        for batch_idx, (batch, _, _) in enumerate(data_loader):
+            # embed = embed.to(device)
             batch = batch.to(device)
             # mask map
-            his_data = mask_his[e_idxlist[batch_idx*args.batch_size:batch_idx*args.batch_size+len(embed)]]
+            his_data = mask_his[e_idxlist[batch_idx*args.batch_size:batch_idx*args.batch_size+len(batch)]]
 
             prediction, mu, logvar = Autoencoder(batch)
             # batch_latent_recon = diffusion.p_sample(model, batch_latent, args.steps, args.sampling_noise)
@@ -233,14 +233,14 @@ for epoch in range(1, args.epochs + 1):
         break
 
     Autoencoder.train()
-    model.train()
+    # model.train()
 
     start_time = time.time()
 
     batch_count = 0
     total_loss = 0.0
     for batch_idx, (batch, embed, label) in enumerate(train_loader):
-        embed = embed.to(device)
+        # embed = embed.to(device)
         batch = batch.to(device)
         label = label.to(device)
         batch_count += 1
