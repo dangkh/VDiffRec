@@ -136,7 +136,7 @@ out_dims = eval(args.out_dims)
 in_dims = eval(args.in_dims)[::-1]
 Autoencoder = AE(item_emb, args.n_cate, in_dims, out_dims, device, args.act_func, args.maxItem, args.reparam).to(device)
 inDim = item_emb.shape[-1]
-setT = selfAttentionSet(inDim, 1, 64, num_items = n_item).to(device)
+setT = DeepSet(inDim, 1, 64, num_items = n_item).to(device)
 
 ### Build Gaussian Diffusion ###
 if args.mean_type == 'x0':
@@ -214,7 +214,7 @@ def evaluate(data_loader, data_te, mask_his, topN):
             # _, batch_latent, _ = Autoencoder.Encode(embed)
             batch_latent = setT(embed, label)
             # comment if using attention
-            # batch_latent = batch_latent.sum(-2)
+            batch_latent = batch_latent.sum(-2)
             
             # batch_latent_recon = diffusion.p_sample(model, batch_latent, args.steps, args.sampling_noise)
             # prediction = Autoencoder.Decode(batch_latent)  # [batch_size, n1_items + n2_items + n3_items]
@@ -271,7 +271,7 @@ for epoch in range(1, args.epochs + 1):
         # _, batch_latent, _ = Autoencoder.Encode(embed)
         batch_latent = setT(embed, label)        
         # comment if using attention
-        # batch_latent = batch_latent.sum(-2)
+        batch_latent = batch_latent.sum(-2)
 
         # terms = diffusion.training_losses(model, batch_latent, args.reweight)
         # elbo = terms["loss"].mean()  # loss from diffusion

@@ -35,15 +35,43 @@ class AttentionPooling(nn.Module):
 
         # Linear layers for attention scoring
         self.size = input_size
-        self.W = nn.Linear(input_size, hidden_size)
-        self.U = nn.Linear(hidden_size, 1)
+        self.V = nn.Linear(input_size, hidden_size)
+        self.w = nn.Linear(hidden_size, 1)
         self.tanh = nn.Tanh()
         self.softmax = nn.Softmax(dim=1)
 
     def forward(self, input_features):
         # Calculate attention scores
-        scores = self.tanh(self.W(input_features)) / torch.sqrt(torch.tensor(self.size))
-        scores = self.U(scores)
+        scores = self.tanh(self.V(input_features)) 
+        scores = self.w(scores)
+        
+        # Apply softmax to get attention weights
+        weights = self.softmax(scores)
+
+        # Apply attention weights to input features
+        pooled_features = torch.sum(weights * input_features, dim=1)
+
+        return pooled_features, weights
+
+
+class GateAttentionPooling(nn.Module):
+    def __init__(self, input_size, hidden_size):
+        super(GateAttentionPooling, self).__init__()
+
+        # Linear layers for attention scoring
+        self.size = input_size
+        self.V = nn.Linear(input_size, hidden_size)
+        self.U = nn.Linear(input_size, hidden_size)
+        self.w = nn.Linear(hidden_size, 1)
+        self.tanh = nn.Tanh()
+        self.sigd = nn.Sigmoid()
+        self.softmax = nn.Softmax(dim=1)
+
+    def forward(self, input_features):
+        # Calculate attention scores
+        v = self.tanh(self.V(input_features)) 
+        u = self.sigd(self.U(input_features)) 
+        scores = self.w(v*u)
         
         # Apply softmax to get attention weights
         weights = self.softmax(scores)
@@ -59,7 +87,7 @@ class selfAttentionSet(nn.Module):
         self.num_outputs = num_outputs
         self.dim_output = dim_output
         self.dropout = nn.Dropout(0.1)
-        self.enc = AttentionPooling(dim_input, dim_input)
+        self.enc = GateAttentionPooling(dim_input, dim_input)
         self.dec = nn.Sequential(
                 nn.ReLU(),
                 nn.Linear(dim_input, num_outputs*dim_output))
