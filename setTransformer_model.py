@@ -29,6 +29,54 @@ class DeepSet(nn.Module):
     def predict(self, X):
         return self.activateF(self.predictItem(X))
 
+class AttentionPooling(nn.Module):
+    def __init__(self, input_size, hidden_size):
+        super(AttentionPooling, self).__init__()
+
+        # Linear layers for attention scoring
+        self.size = input_size
+        self.W = nn.Linear(input_size, hidden_size)
+        self.U = nn.Linear(hidden_size, 1)
+        self.tanh = nn.Tanh()
+        self.softmax = nn.Softmax(dim=1)
+
+    def forward(self, input_features):
+        # Calculate attention scores
+        scores = self.tanh(self.W(input_features)) / torch.sqrt(torch.tensor(self.size))
+        scores = self.U(scores)
+        
+        # Apply softmax to get attention weights
+        weights = self.softmax(scores)
+
+        # Apply attention weights to input features
+        pooled_features = torch.sum(weights * input_features, dim=1)
+
+        return pooled_features, weights
+
+class selfAttentionSet(nn.Module):
+    def __init__(self, dim_input, num_outputs, dim_output, dim_hidden=128, num_items = 1000):
+        super(selfAttentionSet, self).__init__()
+        self.num_outputs = num_outputs
+        self.dim_output = dim_output
+        self.dropout = nn.Dropout(0.1)
+        self.enc = AttentionPooling(dim_input, dim_input)
+        self.dec = nn.Sequential(
+                nn.ReLU(),
+                nn.Linear(dim_input, num_outputs*dim_output))
+        
+        self.predictItem = nn.Linear(dim_output, num_items)
+        self.activateF = nn.Sigmoid()
+
+    def forward(self, X, label):
+        X,_ = self.enc(X)
+        X = self.dec(X)
+        X = self.dropout(X)
+        return X
+
+    def predict(self, X):
+        return self.activateF(self.predictItem(X))
+
+
 class SetTransformer(nn.Module):
     def __init__(self, dim_input, num_outputs, dim_output,
             num_inds=32, dim_hidden=128, num_heads=4, num_items = 1000, ln=False):

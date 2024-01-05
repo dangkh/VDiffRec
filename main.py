@@ -28,6 +28,8 @@ from copy import deepcopy
 from setTransformer_module import *
 from setTransformer_model import *
 import random
+from sklearn.preprocessing import StandardScaler
+
 random_seed = 1001
 torch.manual_seed(random_seed) # cpu
 torch.cuda.manual_seed(random_seed) #gpu
@@ -104,7 +106,14 @@ train_path = args.data_path + 'train_list.npy'
 valid_path = args.data_path + 'valid_list.npy'
 test_path = args.data_path + 'test_list.npy'
 emb_path = args.emb_path + args.dataset + '/item_emb.npy'
-item_emb = torch.from_numpy(np.load(emb_path, allow_pickle=True))
+item_emb = np.load(emb_path, allow_pickle=True)
+# miI = np.min(item_emb, axis = 0)
+# difmima = np.max(item_emb, axis = 0) - miI
+# item_emb = (item_emb - miI) / difmima
+scaler = StandardScaler()
+scaler.fit(item_emb)
+item_emb = scaler.transform(item_emb)
+item_emb = torch.from_numpy(item_emb)
 
 
 train_data, valid_y_data, test_y_data, n_user, n_item = data_utils.data_load(train_path, valid_path, test_path)
@@ -127,7 +136,7 @@ out_dims = eval(args.out_dims)
 in_dims = eval(args.in_dims)[::-1]
 Autoencoder = AE(item_emb, args.n_cate, in_dims, out_dims, device, args.act_func, args.maxItem, args.reparam).to(device)
 inDim = item_emb.shape[-1]
-setT = DeepSet(inDim, 1, 64, num_items = n_item).to(device)
+setT = selfAttentionSet(inDim, 1, 64, num_items = n_item).to(device)
 
 ### Build Gaussian Diffusion ###
 if args.mean_type == 'x0':
@@ -204,7 +213,9 @@ def evaluate(data_loader, data_te, mask_his, topN):
 
             # _, batch_latent, _ = Autoencoder.Encode(embed)
             batch_latent = setT(embed, label)
-            batch_latent = batch_latent.sum(-2)
+            # comment if using attention
+            # batch_latent = batch_latent.sum(-2)
+            
             # batch_latent_recon = diffusion.p_sample(model, batch_latent, args.steps, args.sampling_noise)
             # prediction = Autoencoder.Decode(batch_latent)  # [batch_size, n1_items + n2_items + n3_items]
             prediction = setT.predict(batch_latent)
@@ -259,7 +270,8 @@ for epoch in range(1, args.epochs + 1):
         optimizer3.zero_grad()
         # _, batch_latent, _ = Autoencoder.Encode(embed)
         batch_latent = setT(embed, label)        
-        batch_latent = batch_latent.sum(-2)
+        # comment if using attention
+        # batch_latent = batch_latent.sum(-2)
 
         # terms = diffusion.training_losses(model, batch_latent, args.reweight)
         # elbo = terms["loss"].mean()  # loss from diffusion
