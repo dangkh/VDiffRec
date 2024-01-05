@@ -28,6 +28,8 @@ from copy import deepcopy
 from setTransformer_module import *
 from setTransformer_model import *
 import random
+from sklearn.preprocessing import StandardScaler
+
 random_seed = 1001
 torch.manual_seed(random_seed) # cpu
 torch.cuda.manual_seed(random_seed) #gpu
@@ -104,8 +106,14 @@ train_path = args.data_path + 'train_list.npy'
 valid_path = args.data_path + 'valid_list.npy'
 test_path = args.data_path + 'test_list.npy'
 emb_path = args.emb_path + args.dataset + '/item_emb.npy'
-item_emb = torch.from_numpy(np.load(emb_path, allow_pickle=True))
-
+item_emb = np.load(emb_path, allow_pickle=True)
+# miI = np.min(item_emb, axis = 0)
+# difmima = np.max(item_emb, axis = 0) - miI
+# item_emb = (item_emb - miI) / difmima
+scaler = StandardScaler()
+scaler.fit(item_emb)
+item_emb = scaler.transform(item_emb)
+item_emb = torch.from_numpy(item_emb)
 
 train_data, valid_y_data, test_y_data, n_user, n_item = data_utils.data_load(train_path, valid_path, test_path)
 train_dataset = data_utils.DataDiffusion(torch.FloatTensor(train_data.A), item_emb, args.maxItem)
