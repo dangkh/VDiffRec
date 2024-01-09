@@ -154,9 +154,9 @@ class DataDiffusion(Dataset):
             self.userEmb.append(fulEm)
             self.userEmbMean.append(emb1)
         self.cumNumInteract = [0]
-        for ii in range(len(self.user_numInteract)):
-            self.cumNumInteract.append(self.cumNumInteract[-1] + self.user_numInteract[ii])
-        self.userEmb = torch.vstack(self.userEmb)
+        # for ii in range(len(self.user_numInteract)):
+        #     self.cumNumInteract.append(self.cumNumInteract[-1] + self.user_numInteract[ii])
+        # self.userEmb = torch.vstack(self.userEmb)
 
     def index2itemEm(self, itemIndx):
         output = []
@@ -171,9 +171,9 @@ class DataDiffusion(Dataset):
                 break
         emb_wo_comp = torch.vstack(output).mean(0)
 
-        compensationNum = self.maxItem -counter
-        compensationFeat = torch.zeros((compensationNum,64))
-        output.append(compensationFeat)
+        # compensationNum = self.maxItem -counter
+        # compensationFeat = torch.zeros((compensationNum,1024))
+        # output.append(compensationFeat)
         return torch.vstack(output), emb_wo_comp
 
     def __getitem__(self, index):

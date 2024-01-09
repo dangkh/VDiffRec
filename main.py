@@ -43,7 +43,7 @@ def seed_worker(worker_id):
     np.random.seed(worker_seed)
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--dataset', type=str, default='ml-1m_clean', help='choose the dataset')
+parser.add_argument('--dataset', type=str, default='baby', help='choose the dataset')
 parser.add_argument('--data_path', type=str, default='../datasets/', help='load data path')
 parser.add_argument('--emb_path', type=str, default='../datasets/')
 parser.add_argument('--lr1', type=float, default=0.001, help='learning rate for Autoencoder')
@@ -105,7 +105,7 @@ print("Starting time: ", time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(time.t
 train_path = args.data_path + 'train_list.npy'
 valid_path = args.data_path + 'valid_list.npy'
 test_path = args.data_path + 'test_list.npy'
-emb_path = args.emb_path + args.dataset + '/item_emb.npy'
+emb_path = args.emb_path + args.dataset + '/text_feat.npy'
 item_emb = np.load(emb_path, allow_pickle=True)
 # miI = np.min(item_emb, axis = 0)
 # difmima = np.max(item_emb, axis = 0) - miI
@@ -114,7 +114,6 @@ scaler = StandardScaler()
 scaler.fit(item_emb)
 item_emb = scaler.transform(item_emb)
 item_emb = torch.from_numpy(item_emb)
-
 train_data, valid_y_data, test_y_data, n_user, n_item = data_utils.data_load(train_path, valid_path, test_path)
 train_dataset = data_utils.DataDiffusion(torch.FloatTensor(train_data.A), item_emb, args.maxItem)
 train_loader = DataLoader(train_dataset, batch_size=args.batch_size, pin_memory=True, shuffle=False)

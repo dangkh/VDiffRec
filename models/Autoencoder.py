@@ -25,7 +25,7 @@ class AutoEncoder(nn.Module):
         self.reparam = reparam
         self.dropout = nn.Dropout(dropout)
         # self.U = nn.Embedding(self.maxItem * 64, 64, max_norm=True)
-        self.reduceDim = nn.Linear( 64, self.in_dims[0])
+        self.reduceDim = nn.Linear( 1024, self.in_dims[0])
         self.f1 = nn.Linear( self.in_dims[0], self.in_dims[0])
         # self.decodeDim = nn.Linear(self.in_dims[0], self.maxItem * 64)
         self.predictItem = nn.Linear(self.in_dims[0], self.n_item)
