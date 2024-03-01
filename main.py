@@ -213,9 +213,9 @@ def evaluate(data_loader, data_te, mask_his, topN):
             his_data = mask_his[e_idxlist[batch_idx*args.batch_size:batch_idx*args.batch_size+len(embed)]]
 
             batch_encode, mu, logvar = Autoencoder.get_encode(batch, False)
-            batch_Mask_encode, mu_Mask, logvar_Mask = Autoencoder.get_encode(maskedBatch, False)
+            # batch_Mask_encode, mu_Mask, logvar_Mask = Autoencoder.get_encode(maskedBatch, False)
 
-            batch_latent_recon = diffusion.p_sample(model, batch_encode, args.steps, args.sampling_noise, torch.zeros_like(batch_encode))
+            batch_latent_recon = diffusion.p_sample(model, batch_encode, args.steps, args.sampling_noise, embed)
             prediction = Autoencoder.decode(batch_latent_recon)
             prediction[his_data.nonzero()] = -np.inf  # mask ui pairs in train & validation set
 
@@ -265,9 +265,9 @@ for epoch in range(1, args.epochs + 1):
             LL = dpos[itemBatch]
             if np.random.randint(1,10) % 3 == 0: continue
             mPos1 = LL[random.randint(0,lenLL)]
-            # mPos2 = LL[random.randint(0,lenLL)]
+            mPos2 = LL[random.randint(0,lenLL)]
             batchMask[itemBatch][int(mPos1.item())] = 0
-            # batchMask[itemBatch][int(mPos2.item())] = 0
+            batchMask[itemBatch][int(mPos2.item())] = 0
 
         maskedItem = np.ones_like(batchMask) - batchMask
         maskedBatch = torch.from_numpy(maskedItem) * batch
@@ -284,9 +284,9 @@ for epoch in range(1, args.epochs + 1):
         
         batch_encode, mu, logvar = Autoencoder.get_encode(remaindItem, False)
 
-        batch_Mask_encode, mu_Mask, logvar_Mask = Autoencoder.get_encode(maskedBatch, False)
+        # batch_Mask_encode, mu_Mask, logvar_Mask = Autoencoder.get_encode(maskedBatch, False)
 
-        terms = diffusion.training_losses(model, batch_encode, args.reweight, batch_Mask_encode)
+        terms = diffusion.training_losses(model, batch_encode, args.reweight, embed)
         elbo = terms["loss"].mean()  # loss from diffusion
         # # # batch_latent_recon = terms["z_latent"] 
         batch_latent_recon =terms["pred_xstart"]

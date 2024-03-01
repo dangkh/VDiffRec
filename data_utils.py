@@ -148,7 +148,7 @@ class DataDiffusion(Dataset):
         self.label = sfm(data)
         for ii in range(len(self.data)):
             self.userEmb.append(self.index2itemEm(data[ii]))
-        self.userEmb = torch.vstack(self.userEmb)
+        # self.userEmb = torch.vstack(self.userEmb)
         self.pos = []
         for line in self.data:
             ll = torch.where(line == 1)[0]
@@ -169,6 +169,8 @@ class DataDiffusion(Dataset):
             counter += 1
             if counter > (self.maxItem-1):
                 break
+        outFeat = torch.mean(torch.vstack(output), axis = 0)
+        return outFeat
         compensationNum = self.maxItem -counter
         compensationFeat = torch.zeros(compensationNum*64)
         output.append(compensationFeat)
